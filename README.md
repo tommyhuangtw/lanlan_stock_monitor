@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ailanbao_stock_monitoring
 
-## Getting Started
+AI-powered investment podcast & YouTube digest service. Automatically monitors Chinese-language investment content, transcribes episodes, analyzes with AI, and delivers daily email digests to subscribers.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+RSS/YouTube → Transcription → AI Analysis → Digest Generation → Email Delivery
+              (AssemblyAI)    (OpenRouter)   (Gemini Pro)         (Resend)
+              (Apify)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Stack:** Next.js 16 / Supabase / Vercel Cron / Stripe / PostHog
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Cron Pipeline (UTC)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Schedule | Endpoint | Purpose |
+|----------|----------|---------|
+| Daily 02:00 | `/api/cron/process-feeds` | Fetch latest podcast episodes via RSS |
+| Daily 02:00 | `/api/cron/process-youtube` | Fetch latest YouTube videos |
+| Every 5 min | `/api/cron/check-transcriptions` | Poll AssemblyAI / Apify for results |
+| Every 10 min | `/api/cron/analyze` | AI analysis on completed transcriptions |
+| Daily 23:00 | `/api/cron/generate-digests` | Generate consolidated HTML digest |
+| Daily 00:00 | `/api/cron/send-emails` | Send personalized emails to subscribers |
 
-## Learn More
+## Monitored Sources
 
-To learn more about Next.js, take a look at the following resources:
+**Podcasts:** 股癌, 財經號角, 美股航海王, 韭菜畢業班, 美股投資學
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**YouTube:** Nick 美股咖啡館, NaNa说美股, 陽光財經
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Pricing Model
 
-## Deploy on Vercel
+- **Free trial:** 3 days of daily digests, then weekly (Mondays only)
+- **Pro (NT$199/mo):** Daily digests, launch promo NT$99/mo for first 2 months
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Setup
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Copy `.env.example` to `.env` and fill in all values
+2. `npm install`
+3. Run Supabase migrations in `supabase/migrations/` (in order)
+4. `npm run dev`
+
+## Deployment
+
+Deploy to Vercel with environment variables configured. See `vercel.json` for cron schedules. Requires:
+- Supabase project with migrations applied
+- Stripe webhook pointing to `/api/webhooks/stripe`
+- Resend domain with SPF/DKIM/DMARC configured
+- PostHog project for analytics

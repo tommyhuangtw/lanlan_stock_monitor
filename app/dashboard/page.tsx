@@ -301,7 +301,7 @@ function DashboardContent() {
           <h2 className="text-lg font-semibold text-white mb-4">追蹤來源</h2>
 
           <div className="grid grid-cols-2 gap-3">
-            {sources.map(source => (
+            {[...sources].sort((a, b) => a.type === b.type ? 0 : a.type === 'podcast' ? -1 : 1).map(source => (
               <div
                 key={source.id}
                 className="flex items-center gap-3 p-3 rounded-xl border border-slate-700/50 bg-slate-800/30"

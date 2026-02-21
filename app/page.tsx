@@ -95,7 +95,6 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             }
-            step="01"
             title="自動追蹤"
             description="支援多個熱門台股、美股投資 Podcast 及 YouTube 頻道，自動抓取最新集數"
           />
@@ -105,7 +104,6 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             }
-            step="02"
             title="AI 分析"
             description="AI 自動轉錄並分析內容，提取關鍵觀點與投資洞見"
           />
@@ -115,7 +113,6 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             }
-            step="03"
             title="每日摘要"
             description="每天自動收到精華摘要，包含提到的股票與主持人看法"
           />
@@ -236,8 +233,8 @@ export default function HomePage() {
       {/* Pricing */}
       <div className="max-w-4xl mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold text-white mb-4">簡單透明的定價</h2>
-          <p className="text-slate-400">選擇適合你的方案</p>
+          <h2 className="text-3xl font-bold text-white mb-4">選擇你的方案</h2>
+          <p className="text-slate-400">免費開始，隨時升級</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -452,22 +449,19 @@ function SourceCard({
 
 function FeatureCard({
   icon,
-  step,
   title,
   description
 }: {
   icon: React.ReactNode;
-  step: string;
   title: string;
   description: string;
 }) {
   return (
     <div className="group bg-slate-800/30 backdrop-blur-sm rounded-2xl p-8 border border-slate-700/50 hover:border-amber-500/30 transition-all cursor-pointer">
-      <div className="flex items-center gap-4 mb-4">
+      <div className="mb-4">
         <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400 group-hover:bg-amber-500/20 transition-colors">
           {icon}
         </div>
-        <span className="text-amber-500/50 text-sm font-mono">{step}</span>
       </div>
       <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
       <p className="text-slate-400 leading-relaxed">{description}</p>

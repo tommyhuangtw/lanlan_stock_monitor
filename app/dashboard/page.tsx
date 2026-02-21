@@ -18,8 +18,20 @@ interface User {
 interface Source {
   id: string;
   name: string;
+  type: string;
   description: string | null;
 }
+
+const sourceImages: Record<string, string> = {
+  'gooaye': '/sources/股涯.webp',
+  'sailing-king': '/sources/美股航海王.webp',
+  'us-stock-academy': '/sources/Jenny美股投資學.webp',
+  'finance-horn': '/sources/游庭皓的財經皓角.webp',
+  'leek-graduate': '/sources/韭菜畢業班.webp',
+  'nick-us-stock': '/sources/Nick美股咖啡館.jpg',
+  'nana-us-stock': '/sources/nana說美股.jpg',
+  'sunny-finance': '/sources/陽光財經.jpg',
+};
 
 function DashboardContent() {
   const router = useRouter();
@@ -288,22 +300,26 @@ function DashboardContent() {
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
           <h2 className="text-lg font-semibold text-white mb-4">追蹤來源</h2>
 
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             {sources.map(source => (
               <div
                 key={source.id}
-                className="p-4 rounded-xl border border-slate-700/50 bg-slate-800/30"
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-700/50 bg-slate-800/30"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-700/50">
-                    <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-medium text-white">{source.name}</h3>
-                    <p className="text-sm text-slate-400">{source.description}</p>
-                  </div>
+                <img
+                  src={sourceImages[source.id] || ''}
+                  alt={source.name}
+                  className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <h3 className="font-medium text-white text-sm leading-tight truncate">{source.name}</h3>
+                  <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full mt-1 ${
+                    source.type === 'podcast'
+                      ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}>
+                    {source.type === 'podcast' ? 'Podcast' : 'YouTube'}
+                  </span>
                 </div>
               </div>
             ))}

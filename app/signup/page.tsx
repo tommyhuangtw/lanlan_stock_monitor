@@ -37,7 +37,8 @@ export default function SignupPage() {
         throw new Error(data.error || '註冊失敗');
       }
 
-      router.push('/thank-you?email=' + encodeURIComponent(email));
+      sessionStorage.setItem('signup_email', email);
+      router.push('/thank-you');
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤，請稍後再試');
     } finally {

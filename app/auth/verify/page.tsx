@@ -21,6 +21,9 @@ function VerifyContent() {
       return;
     }
 
+    // Immediately remove token from URL and browser history
+    window.history.replaceState({}, '', '/auth/verify');
+
     const verify = async () => {
       try {
         const res = await fetch('/api/auth/verify', {
@@ -39,7 +42,7 @@ function VerifyContent() {
 
         // Redirect to dashboard after 1.5 seconds
         setTimeout(() => {
-          router.push('/dashboard');
+          router.replace('/dashboard');
         }, 1500);
       } catch (err) {
         setStatus('error');

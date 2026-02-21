@@ -37,6 +37,10 @@ function DashboardContent() {
     if (searchParams.get('upgraded') === 'true') {
       setUpgraded(true);
     }
+    // Clean up query params from URL
+    if (window.location.search) {
+      window.history.replaceState({}, '', '/dashboard');
+    }
   }, [searchParams]);
 
   const fetchData = async () => {

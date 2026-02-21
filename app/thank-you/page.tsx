@@ -92,15 +92,16 @@ function ThankYouContent() {
         <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-2xl border border-amber-500/30 p-8 text-center mb-8">
           <h3 className="text-xl font-bold text-white mb-2">想要每天收到摘要？</h3>
           <p className="text-slate-400 mb-6">升級專業版，每天比別人早一步掌握投資訊號</p>
+          <p className="text-white text-2xl font-bold mb-1">
+            <span className="text-slate-500 line-through text-lg font-normal mr-2">NT$199/月</span>
+            NT$99/月
+          </p>
+          <p className="text-amber-400/80 text-sm mb-6">前兩個月限時優惠・7 天內升級</p>
           <Link href="/upgrade">
             <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer" size="lg">
-              升級專業版 — NT$99/月
+              升級專業版 →
             </Button>
           </Link>
-          <p className="text-slate-400 text-sm mt-4">
-            <span className="text-slate-500 line-through mr-2">NT$199/月</span>
-            7 天內升級享前兩個月 NT$99/月 優惠
-          </p>
         </div>
 
         {/* Tips */}

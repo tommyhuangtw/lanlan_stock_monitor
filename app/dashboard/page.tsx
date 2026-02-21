@@ -274,12 +274,19 @@ function DashboardContent() {
         </div>
 
         {/* Trial Promo Banner */}
-        {!user?.is_paid && daysAsMember < 7 && (
-          <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 rounded-2xl border border-amber-500/30 p-5 mb-8">
+        {!user?.is_paid && daysAsMember < 7 && (() => {
+          const daysLeft = 7 - daysAsMember;
+          const isUrgent = daysLeft <= 2;
+          return (
+          <div className={`bg-gradient-to-r rounded-2xl p-5 mb-8 ${
+            isUrgent
+              ? 'from-red-500/15 to-red-600/5 border border-red-500/40'
+              : 'from-amber-500/10 to-amber-600/5 border border-amber-500/30'
+          }`}>
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <p className="text-amber-400 font-semibold text-sm mb-1">
-                  限時優惠（還剩 {7 - daysAsMember} 天）
+                <p className={`font-semibold text-sm mb-1 ${isUrgent ? 'text-red-400' : 'text-amber-400'}`}>
+                  {isUrgent ? `⚠ 限時優惠即將結束（還剩 ${daysLeft} 天）` : `限時優惠（還剩 ${daysLeft} 天）`}
                 </p>
                 <p className="text-white text-lg font-bold">
                   <span className="text-slate-500 line-through text-sm font-normal mr-2">NT$199/月</span>
@@ -288,13 +295,18 @@ function DashboardContent() {
                 <p className="text-slate-400 text-xs mt-1">試用結束後升級為原價 NT$199/月</p>
               </div>
               <Link href="/upgrade">
-                <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer" size="sm">
+                <Button className={`font-semibold cursor-pointer ${
+                  isUrgent
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-amber-500 hover:bg-amber-600 text-slate-900'
+                }`} size="sm">
                   立即升級 →
                 </Button>
               </Link>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Sources List (display only) */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">

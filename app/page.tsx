@@ -141,6 +141,7 @@ export default function HomePage() {
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/gooaye-%E8%82%A1%E7%99%8C/id1500839292' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/1zWxx5pKk0XBEzMupVC7UZ' },
+              { label: 'KKBOX', url: 'https://podcast.kkbox.com/sg/channel/0ogFO_N3A9IEgjUEhY' },
             ]}
           />
           {/* 美股航海王｜指數流 */}
@@ -154,6 +155,7 @@ export default function HomePage() {
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E7%BE%8E%E8%82%A1%E8%88%AA%E6%B5%B7%E7%8E%8B-%E6%8C%87%E6%95%B8%E6%B5%81/id1689219140' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/16unn8TIxj7OQ2exSd0NPk' },
+              { label: 'KKBOX', url: 'https://podcast.kkbox.com/sg/channel/P_WUCQ1b7808qRJRVC' },
             ]}
           />
           {/* 美股投資學-財女珍妮 */}
@@ -180,13 +182,17 @@ export default function HomePage() {
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E6%B8%B8%E5%BA%AD%E7%9A%93%E7%9A%84%E8%B2%A1%E7%B6%93%E7%9A%93%E8%A7%92/id1488295306' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/1HOGxT9M7a6kpcDi4q27Q7' },
+              { label: 'KKBOX', url: 'https://podcast.kkbox.com/sg/channel/P_QhqQ1b7808pZTCQ0' },
             ]}
           />
           {/* 韭菜畢業班 */}
           <SourceCard
             name="韭菜畢業班"
+            host="叔叔"
             type="podcast"
             image="/sources/韭菜畢業班.webp"
+            rating="5.0"
+            reviews="5,137+"
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E9%9F%AD%E8%8F%9C%E7%95%A2%E6%A5%AD%E7%8F%AD/id1711618619' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/66ENh5UtNA3pPNOT0IZjO1' },
@@ -207,6 +213,7 @@ export default function HomePage() {
             name="NaNa說美股"
             type="youtube"
             image="/sources/nana說美股.jpg"
+            subscribers="30.4萬"
             links={[
               { label: 'YouTube', url: 'https://www.youtube.com/channel/UCFhJ8ZFg9W4kLwFTBBNIjOw' },
             ]}
@@ -216,6 +223,7 @@ export default function HomePage() {
             name="陽光財經"
             type="youtube"
             image="/sources/陽光財經.jpg"
+            subscribers="29.6萬"
             links={[
               { label: 'YouTube', url: 'https://www.youtube.com/channel/UC2I5em6UyBpQiO-8ZW0nV3w' },
             ]}
@@ -425,6 +433,11 @@ function SourceCard({
             {link.label === 'Spotify' && (
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+              </svg>
+            )}
+            {link.label === 'KKBOX' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1.5 16.5h-3v-9h3v3.75L14.25 7.5h3.375L13.5 12l4.125 4.5H14.25L10.5 12.75V16.5z" />
               </svg>
             )}
             {link.label}

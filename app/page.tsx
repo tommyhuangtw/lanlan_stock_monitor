@@ -170,10 +170,11 @@ export default function HomePage() {
               推薦
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">專業版</h3>
-            <p className="text-4xl font-bold text-white mb-1">
-              NT$199
-            </p>
-            <p className="text-slate-500 mb-6">每月</p>
+            <div className="flex items-baseline gap-3 mb-1">
+              <p className="text-4xl font-bold text-white">NT$99</p>
+              <p className="text-xl text-slate-500 line-through">NT$199</p>
+            </div>
+            <p className="text-slate-500 mb-6">每月・前兩個月特價</p>
             <ul className="space-y-4 text-slate-300 mb-8">
               <li className="flex items-center gap-3">
                 <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -199,9 +200,6 @@ export default function HomePage() {
                 升級專業版
               </Button>
             </Link>
-            <p className="text-center text-amber-400/70 text-sm mt-4">
-              前兩個月特價 NT$99/月
-            </p>
           </div>
         </div>
       </div>

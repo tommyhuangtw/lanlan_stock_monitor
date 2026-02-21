@@ -169,6 +169,7 @@ export default function HomePage() {
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/us/podcast/%E7%BE%8E%E8%82%A1%E6%8A%95%E8%B3%87%E5%AD%B8-%E8%B2%A1%E5%A5%B3%E7%8F%8D%E5%A6%AE/id1546879892' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/3dTKJkvceKNHaYoh7Przbg' },
+              { label: 'KKBOX', url: 'https://podcast.kkbox.com/tw/channel/0rQ3Nqkt3BhkWsKc3Y' },
             ]}
           />
           {/* 游庭皓的財經皓角 */}
@@ -196,6 +197,7 @@ export default function HomePage() {
             links={[
               { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E9%9F%AD%E8%8F%9C%E7%95%A2%E6%A5%AD%E7%8F%AD/id1711618619' },
               { label: 'Spotify', url: 'https://open.spotify.com/show/66ENh5UtNA3pPNOT0IZjO1' },
+              { label: 'KKBOX', url: 'https://podcast.kkbox.com/sg/channel/_Xr8gNm40P-sxy2TQw' },
             ]}
           />
           {/* Nick 美股咖啡館 */}

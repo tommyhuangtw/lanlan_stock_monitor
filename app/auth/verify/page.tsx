@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,13 @@ import { Suspense } from 'react';
 function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const tokenRef = useRef(searchParams.get('token'));
 
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const token = tokenRef.current;
     if (!token) {
       setStatus('error');
       setError('無效的連結');
@@ -51,7 +52,7 @@ function VerifyContent() {
     };
 
     verify();
-  }, [token, router]);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-[#0F172A] flex items-center justify-center px-4">

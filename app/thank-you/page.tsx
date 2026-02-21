@@ -87,7 +87,7 @@ function ThankYouContent() {
                 3
               </div>
               <div>
-                <p className="font-medium text-slate-400">第 4 天起</p>
+                <p className="font-medium text-slate-400">第 8 天起</p>
                 <p className="text-sm text-slate-500">免費版改為每週一封（週一發送）</p>
               </div>
             </div>
@@ -100,10 +100,13 @@ function ThankYouContent() {
           <p className="text-slate-400 mb-6">升級專業版，每天比別人早一步掌握投資訊號</p>
           <Link href="/upgrade">
             <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer" size="lg">
-              升級專業版 - NT$199/月
+              升級專業版 — NT$99/月
             </Button>
           </Link>
-          <p className="text-amber-400/70 text-sm mt-4">前兩個月特價 NT$99/月</p>
+          <p className="text-slate-400 text-sm mt-4">
+            <span className="text-slate-500 line-through mr-2">NT$199/月</span>
+            7 天內升級享前兩個月 NT$99/月 優惠
+          </p>
         </div>
 
         {/* Tips */}

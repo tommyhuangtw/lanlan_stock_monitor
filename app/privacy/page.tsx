@@ -27,7 +27,7 @@ export default function PrivacyPage() {
             <p>當您使用「懶懶財經速報」服務時，我們會收集以下資料：</p>
             <ul className="list-disc pl-6 space-y-2 text-slate-400">
               <li><strong className="text-slate-300">電子郵件地址</strong> — 用於帳戶註冊、登入驗證及寄送摘要報告。</li>
-              <li><strong className="text-slate-300">來源偏好設定</strong> — 您選擇追蹤的 Podcast 來源。</li>
+              <li><strong className="text-slate-300">來源偏好設定</strong> — 您選擇追蹤的 Podcast 及 YouTube 來源。</li>
               <li><strong className="text-slate-300">訂閱狀態</strong> — 免費版或專業版的訂閱紀錄。</li>
             </ul>
           </section>
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">2. 資料使用方式</h2>
             <p>我們使用您的資料僅用於以下目的：</p>
             <ul className="list-disc pl-6 space-y-2 text-slate-400">
-              <li>寄送投資 Podcast AI 摘要報告至您的電子郵件。</li>
+              <li>寄送投資 Podcast 及 YouTube AI 摘要報告至您的電子郵件。</li>
               <li>維護您的帳戶及訂閱狀態。</li>
               <li>改善服務品質。</li>
             </ul>

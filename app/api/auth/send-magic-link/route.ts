@@ -78,7 +78,7 @@ export async function POST(request: Request) {
               <hr style="border: none; border-top: 1px solid #334155; margin: 32px 0;">
 
               <p style="color: #64748B; font-size: 12px; text-align: center;">
-                懶懶財經速報 - AI 自動摘要投資 Podcast
+                懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube
               </p>
             </div>
           </body>

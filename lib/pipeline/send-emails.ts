@@ -333,7 +333,7 @@ function generateTrialEndEmail(magicLinkUrl: string, upgradeUrl: string, unsubsc
     <!-- Footer -->
     <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0;">
     <p style="color: #64748B; font-size: 12px; text-align: center; margin: 0;">
-      懶懶財經速報 - AI 自動摘要投資 Podcast<br>
+      懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube<br>
       <a href="${magicLinkUrl}" style="color: #64748B; text-decoration: underline;">管理訂閱</a>
       &nbsp;·&nbsp;
       <a href="${unsubscribeUrl}" style="color: #64748B; text-decoration: underline;">取消訂閱</a>

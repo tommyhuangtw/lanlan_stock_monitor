@@ -72,7 +72,7 @@ export default function SignupPage() {
             開始免費試用
           </h1>
           <p className="text-slate-400">
-            輸入 Email，立即收到投資 Podcast 精華摘要
+            輸入 Email，立即收到投資 Podcast 及 YouTube 精華摘要
           </p>
         </div>
 
@@ -140,7 +140,7 @@ export default function SignupPage() {
               <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              <span className="text-sm">涵蓋多個熱門投資 Podcast</span>
+              <span className="text-sm">涵蓋多個熱門投資 Podcast 及 YouTube 頻道</span>
             </div>
           </div>
         </div>

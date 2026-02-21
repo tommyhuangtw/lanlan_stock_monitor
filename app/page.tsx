@@ -31,7 +31,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <div className="max-w-5xl mx-auto px-4 pt-32 pb-20 text-center">
         <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-          投資 Podcast 太多聽不完？
+          投資節目太多聽不完？
           <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-200">
             讓 AI 幫你摘要重點
@@ -39,7 +39,7 @@ export default function HomePage() {
         </h1>
 
         <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-          自動追蹤熱門台股、美股投資 Podcast，
+          自動追蹤熱門台股、美股投資 Podcast 及 YouTube 節目，
           <br />
           每天自動收到 AI 摘要及重點股票趨勢分析
         </p>
@@ -97,7 +97,7 @@ export default function HomePage() {
             }
             step="01"
             title="自動追蹤"
-            description="支援多個熱門台股、美股投資 Podcast，自動抓取最新集數"
+            description="支援多個熱門台股、美股投資 Podcast 及 YouTube 頻道，自動抓取最新集數"
           />
           <FeatureCard
             icon={
@@ -229,7 +229,7 @@ export default function HomePage() {
             <div className="bg-slate-800/30 rounded-xl px-6 py-4">
               <p className="text-slate-400 text-sm text-center leading-relaxed">
                 <span className="font-medium text-slate-300">免責聲明：</span>
-                本服務為獨立第三方工具，與任何 Podcast 創作者或節目無任何關聯、合作或背書關係。
+                本服務為獨立第三方工具，與任何 Podcast 或 YouTube 創作者及節目無任何關聯、合作或背書關係。
                 所有分析內容僅供參考，不構成投資建議。投資有風險，請自行判斷。
               </p>
             </div>

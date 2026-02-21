@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       .select('id, name')
       .eq('is_active', true);
 
-    const sourceNames = sources?.map(s => s.name).join('、') || '全部熱門投資 Podcast';
+    const sourceNames = sources?.map(s => s.name).join('、') || '全部熱門投資 Podcast 及 YouTube 頻道';
     const allSourceIds = sources?.map(s => s.id) || [];
 
     // Create magic link for the welcome email
@@ -255,7 +255,7 @@ function injectWelcomeHeader(
     <div style="text-align: center; margin-bottom: 32px;">
       <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
       <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
-      <p style="color: #94A3B8; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 摘要助手</p>
+      <p style="color: #94A3B8; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>
 
     <!-- Timeline -->
@@ -362,7 +362,7 @@ function generateWelcomeEmailWithExample(
     <div style="text-align: center; margin-bottom: 32px;">
       <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
       <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
-      <p style="color: #94A3B8; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 摘要助手</p>
+      <p style="color: #94A3B8; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>
 
     <!-- Timeline -->
@@ -415,7 +415,7 @@ function generateWelcomeEmailWithExample(
     <!-- Footer -->
     <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0;">
     <p style="color: #64748B; font-size: 12px; text-align: center; margin: 0;">
-      懶懶財經速報 - AI 自動摘要投資 Podcast<br>
+      懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube<br>
       <a href="${magicLinkUrl}" style="color: #64748B; text-decoration: underline;">管理訂閱</a>
     </p>
   </div>

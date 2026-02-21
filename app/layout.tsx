@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "懶懶財經速報 - AI 自動摘要投資 Podcast",
-  description: "自動追蹤股癌、美股航海王等熱門投資 Podcast，每天收到 AI 摘要 + 提到的股票",
+  title: "懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube",
+  description: "自動追蹤股癌、美股航海王等熱門投資 Podcast 及 YouTube 頻道，每天收到 AI 摘要 + 提到的股票",
 };
 
 export default function RootLayout({

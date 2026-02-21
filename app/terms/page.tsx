@@ -24,12 +24,12 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">1. 服務描述</h2>
-            <p>「懶懶財經速報」是一項自動化服務，透過 AI 技術追蹤並摘要台灣及美股相關投資 Podcast 內容，並以電子郵件方式寄送報告給訂閱用戶。</p>
+            <p>「懶懶財經速報」是一項自動化服務，透過 AI 技術追蹤並摘要台灣及美股相關投資 Podcast 及 YouTube 內容，並以電子郵件方式寄送報告給訂閱用戶。</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">2. 免責聲明</h2>
-            <p className="text-amber-400/80">本服務為獨立第三方工具，與任何 Podcast 創作者或節目無任何關聯、合作或背書關係。所有分析內容由 AI 自動生成，僅供參考，不構成投資建議。投資有風險，請自行判斷。</p>
+            <p className="text-amber-400/80">本服務為獨立第三方工具，與任何 Podcast 或 YouTube 創作者及節目無任何關聯、合作或背書關係。所有分析內容由 AI 自動生成，僅供參考，不構成投資建議。投資有風險，請自行判斷。</p>
           </section>
 
           <section>

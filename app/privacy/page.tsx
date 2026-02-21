@@ -61,12 +61,12 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">5. 資料保留與刪除</h2>
-            <p>您可以隨時透過 Email 中的退訂連結取消訂閱，停止接收報告。如需完全刪除帳戶及相關資料，請聯絡我們。</p>
+            <p>您可以隨時透過 Email 中的退訂連結取消訂閱，停止接收報告。如需完全刪除帳戶及相關資料，請聯絡 <a href="mailto:contact@ailanbao.org" className="text-amber-400 hover:text-amber-300">contact@ailanbao.org</a>。</p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">6. 聯絡方式</h2>
-            <p>如對隱私權政策有任何問題，請透過電子郵件聯絡我們。</p>
+            <p>如對隱私權政策有任何問題，請透過 <a href="mailto:contact@ailanbao.org" className="text-amber-400 hover:text-amber-300">contact@ailanbao.org</a> 聯絡我們。</p>
           </section>
         </div>
 

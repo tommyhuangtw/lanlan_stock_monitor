@@ -97,7 +97,7 @@ function UpgradeContent() {
       <div className="max-w-lg mx-auto px-4 py-16">
         {cancelled && (
           <div className="mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
-            付款已取消。如需協助，請聯絡我們。
+            付款已取消。如需協助，請聯絡 <a href="mailto:contact@ailanbao.org" className="underline">contact@ailanbao.org</a>。
           </div>
         )}
 

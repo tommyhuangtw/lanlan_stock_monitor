@@ -330,7 +330,7 @@ export default function HomePage() {
             <div className="flex items-center gap-6 text-slate-500 text-sm">
               <Link href="/privacy" className="hover:text-slate-300 transition-colors cursor-pointer">隱私權政策</Link>
               <Link href="/terms" className="hover:text-slate-300 transition-colors cursor-pointer">服務條款</Link>
-              <a href="mailto:support@investsignal.app" className="hover:text-slate-300 transition-colors cursor-pointer">聯絡我們</a>
+              <a href="mailto:contact@ailanbao.org" className="hover:text-slate-300 transition-colors cursor-pointer">聯絡我們</a>
             </div>
           </div>
           {/* Disclaimer */}

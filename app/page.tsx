@@ -122,6 +122,107 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Sources Showcase */}
+      <div className="max-w-5xl mx-auto px-4 py-20">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold text-white mb-4">我們追蹤的來源</h2>
+          <p className="text-slate-400">站在巨人的肩膀上 — 我們鼓勵你訂閱這些優質創作者</p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Gooaye 股癌 */}
+          <SourceCard
+            name="Gooaye 股癌"
+            host="謝孟恭"
+            type="podcast"
+            image="/sources/股涯.webp"
+            rating="4.8"
+            reviews="3.5萬+"
+            links={[
+              { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/gooaye-%E8%82%A1%E7%99%8C/id1500839292' },
+              { label: 'Spotify', url: 'https://open.spotify.com/show/1zWxx5pKk0XBEzMupVC7UZ' },
+            ]}
+          />
+          {/* 美股航海王｜指數流 */}
+          <SourceCard
+            name="美股航海王｜指數流"
+            host="傑克·史派羅"
+            type="podcast"
+            image="/sources/美股航海王.webp"
+            rating="4.9"
+            reviews="2,300+"
+            links={[
+              { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E7%BE%8E%E8%82%A1%E8%88%AA%E6%B5%B7%E7%8E%8B-%E6%8C%87%E6%95%B8%E6%B5%81/id1689219140' },
+              { label: 'Spotify', url: 'https://open.spotify.com/show/16unn8TIxj7OQ2exSd0NPk' },
+            ]}
+          />
+          {/* 美股投資學-財女珍妮 */}
+          <SourceCard
+            name="美股投資學-財女珍妮"
+            host="財女 Jenny"
+            type="podcast"
+            image="/sources/Jenny美股投資學.webp"
+            rating="4.8"
+            reviews="2,120+"
+            links={[
+              { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/us/podcast/%E7%BE%8E%E8%82%A1%E6%8A%95%E8%B3%87%E5%AD%B8-%E8%B2%A1%E5%A5%B3%E7%8F%8D%E5%A6%AE/id1546879892' },
+              { label: 'Spotify', url: 'https://open.spotify.com/show/3dTKJkvceKNHaYoh7Przbg' },
+            ]}
+          />
+          {/* 游庭皓的財經皓角 */}
+          <SourceCard
+            name="游庭皓的財經皓角"
+            host="游庭皓"
+            type="podcast"
+            image="/sources/游庭皓的財經皓角.webp"
+            rating="4.6"
+            reviews="1,873+"
+            links={[
+              { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E6%B8%B8%E5%BA%AD%E7%9A%93%E7%9A%84%E8%B2%A1%E7%B6%93%E7%9A%93%E8%A7%92/id1488295306' },
+              { label: 'Spotify', url: 'https://open.spotify.com/show/1HOGxT9M7a6kpcDi4q27Q7' },
+            ]}
+          />
+          {/* 韭菜畢業班 */}
+          <SourceCard
+            name="韭菜畢業班"
+            type="podcast"
+            image="/sources/韭菜畢業班.webp"
+            links={[
+              { label: 'Apple Podcasts', url: 'https://podcasts.apple.com/tw/podcast/%E9%9F%AD%E8%8F%9C%E7%95%A2%E6%A5%AD%E7%8F%AD/id1711618619' },
+              { label: 'Spotify', url: 'https://open.spotify.com/show/66ENh5UtNA3pPNOT0IZjO1' },
+            ]}
+          />
+          {/* Nick 美股咖啡館 */}
+          <SourceCard
+            name="Nick 美股咖啡館"
+            type="youtube"
+            image="/sources/Nick美股咖啡館.jpg"
+            subscribers="15.3萬"
+            links={[
+              { label: 'YouTube', url: 'https://www.youtube.com/@nick_valueinvesting' },
+            ]}
+          />
+          {/* NaNa說美股 */}
+          <SourceCard
+            name="NaNa說美股"
+            type="youtube"
+            image="/sources/nana說美股.jpg"
+            links={[
+              { label: 'YouTube', url: 'https://www.youtube.com/channel/UCFhJ8ZFg9W4kLwFTBBNIjOw' },
+            ]}
+          />
+          {/* 陽光財經 */}
+          <SourceCard
+            name="陽光財經"
+            type="youtube"
+            image="/sources/陽光財經.jpg"
+            links={[
+              { label: 'YouTube', url: 'https://www.youtube.com/channel/UC2I5em6UyBpQiO-8ZW0nV3w' },
+            ]}
+          />
+        </div>
+      </div>
+
       {/* Pricing */}
       <div className="max-w-4xl mx-auto px-4 py-20">
         <div className="text-center mb-16">
@@ -234,6 +335,102 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function SourceCard({
+  name,
+  host,
+  type,
+  image,
+  rating,
+  reviews,
+  subscribers,
+  links,
+}: {
+  name: string;
+  host?: string;
+  type: 'podcast' | 'youtube';
+  image: string;
+  rating?: string;
+  reviews?: string;
+  subscribers?: string;
+  links: { label: string; url: string }[];
+}) {
+  return (
+    <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-amber-500/30 transition-all">
+      <div className="flex items-start gap-4 mb-4">
+        <img
+          src={image}
+          alt={name}
+          className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+        />
+        <div className="min-w-0">
+          <h3 className="font-semibold text-white text-sm leading-tight mb-1">{name}</h3>
+          {host && <p className="text-slate-500 text-xs mb-1.5">{host}</p>}
+          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${
+            type === 'podcast'
+              ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          }`}>
+            {type === 'podcast' ? 'Podcast' : 'YouTube'}
+          </span>
+        </div>
+      </div>
+
+      {(rating || subscribers) && (
+        <div className="mb-4">
+          {rating && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              <span className="text-white font-medium">{rating}</span>
+              <span className="text-slate-500 text-xs">({reviews} 則評分)</span>
+            </div>
+          )}
+          {subscribers && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg>
+              <span className="text-white font-medium">{subscribers}</span>
+              <span className="text-slate-500 text-xs">訂閱者</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {links.map((link) => (
+          <a
+            key={link.label}
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 hover:text-white transition-colors"
+          >
+            {link.label === 'YouTube' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" />
+                <path fill="#0F172A" d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+            )}
+            {link.label === 'Apple Podcasts' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5.34 0A5.328 5.328 0 000 5.34v13.32A5.328 5.328 0 005.34 24h13.32A5.328 5.328 0 0024 18.66V5.34A5.328 5.328 0 0018.66 0zm6.525 2.568c4.988 0 7.455 3.582 7.455 6.774 0 2.085-1.146 3.573-2.64 3.573-1.254 0-2.022-.852-2.022-2.1 0-1.29.81-2.076 2.022-2.076.192 0 .396.024.588.072-.168-1.908-1.71-3.894-4.29-3.894-2.976 0-5.22 2.502-5.22 6.126 0 3.39 1.974 6.264 5.1 6.264 1.002 0 1.974-.228 2.76-.636l.456.81c-.888.468-2.028.756-3.216.756-4.242 0-7.32-3.378-7.32-7.47 0-4.326 3.24-8.199 8.327-8.199zm-.198 8.616c.9 0 1.596.744 1.596 1.68 0 .516-.192.96-.504 1.296l.648 3.336h-3.48l.648-3.336a1.716 1.716 0 01-.504-1.296c0-.936.696-1.68 1.596-1.68z" />
+              </svg>
+            )}
+            {link.label === 'Spotify' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+              </svg>
+            )}
+            {link.label}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

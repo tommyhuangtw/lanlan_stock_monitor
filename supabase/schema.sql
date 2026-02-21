@@ -90,16 +90,16 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 -- Initial Sources Data
 -- =============================================
 INSERT INTO sources (id, name, type, rss_url, description) VALUES
-  ('sailing-king', '美股航海王', 'podcast', 'https://feed.firstory.me/rss/user/closlgwno050c01tz1bqh4nff', '美股投資分析'),
+  ('gooaye', 'Gooaye 股癌', 'podcast', 'https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml', 'Gooaye 股癌投資分析'),
+  ('sailing-king', '美股航海王｜指數流', 'podcast', 'https://feed.firstory.me/rss/user/closlgwno050c01tz1bqh4nff', '美股投資分析'),
   ('leek-graduate', '韭菜畢業班', 'podcast', 'https://feeds.soundon.fm/podcasts/70907bd6-d0ae-4b64-bc38-2bf48ae4fc36.xml', '投資理財教育'),
-  ('us-stock-academy', '美股投資學', 'podcast', 'https://feeds.soundon.fm/podcasts/4a8660a0-e0d0-490b-8d46-c28219606f47.xml', '美股投資教學'),
-  ('finance-horn', '財經號角', 'podcast', 'https://feeds.soundcloud.com/users/soundcloud:users:735679489/sounds.rss', '財經新聞分析'),
-  ('other-source', '其他來源', 'podcast', 'https://feeds.soundon.fm/podcasts/954689a5-3096-43a4-a80b-7810b219cef3.xml', '投資相關內容')
+  ('us-stock-academy', '美股投資學-財女珍妮', 'podcast', 'https://feeds.soundon.fm/podcasts/4a8660a0-e0d0-490b-8d46-c28219606f47.xml', '美股投資教學'),
+  ('finance-horn', '游庭皓的財經皓角', 'podcast', 'https://feeds.soundcloud.com/users/soundcloud:users:735679489/sounds.rss', '財經新聞分析')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO sources (id, name, type, youtube_channel_id, description) VALUES
   ('nick-us-stock', 'Nick 美股咖啡館', 'youtube', 'UCjrP2TtSTifuRJ76hW2IW1A', 'Nick 美股分析'),
-  ('nana-us-stock', 'NaNa说美股', 'youtube', 'UCFhJ8ZFg9W4kLwFTBBNIjOw', 'NaNa 美股解讀'),
+  ('nana-us-stock', 'NaNa說美股', 'youtube', 'UCFhJ8ZFg9W4kLwFTBBNIjOw', 'NaNa 美股解讀'),
   ('sunny-finance', '陽光財經', 'youtube', 'UC2I5em6UyBpQiO-8ZW0nV3w', '陽光財經分析')
 ON CONFLICT (id) DO NOTHING;
 

@@ -64,7 +64,7 @@ export default function HomePage() {
             <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Claude AI 分析</span>
+            <span>AI 智慧分析</span>
           </div>
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -107,7 +107,7 @@ export default function HomePage() {
             }
             step="02"
             title="AI 分析"
-            description="Claude AI 自動轉錄並分析內容，提取關鍵觀點與投資洞見"
+            description="AI 自動轉錄並分析內容，提取關鍵觀點與投資洞見"
           />
           <FeatureCard
             icon={
@@ -151,14 +151,14 @@ export default function HomePage() {
                 前 3 天每日摘要
               </li>
               <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-slate-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                <svg className="w-5 h-5 text-emerald-400/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-slate-500">之後每週一收到</span>
+                <span className="text-slate-400">之後每週一收到</span>
               </li>
             </ul>
             <Link href="/signup" className="block">
-              <Button variant="outline" className="w-full border-slate-600 text-white hover:bg-slate-700 cursor-pointer" size="lg">
+              <Button className="w-full bg-slate-700 hover:bg-slate-600 text-white border border-slate-500 font-semibold cursor-pointer" size="lg">
                 免費開始
               </Button>
             </Link>
@@ -226,10 +226,13 @@ export default function HomePage() {
           </div>
           {/* Disclaimer */}
           <div className="mt-8 pt-6 border-t border-slate-800/50">
-            <p className="text-slate-600 text-xs text-center leading-relaxed">
-              免責聲明：本服務為獨立第三方工具，與任何 Podcast 創作者或節目無任何關聯、合作或背書關係。
-              所有分析內容僅供參考，不構成投資建議。投資有風險，請自行判斷。
-            </p>
+            <div className="bg-slate-800/30 rounded-xl px-6 py-4">
+              <p className="text-slate-400 text-sm text-center leading-relaxed">
+                <span className="font-medium text-slate-300">免責聲明：</span>
+                本服務為獨立第三方工具，與任何 Podcast 創作者或節目無任何關聯、合作或背書關係。
+                所有分析內容僅供參考，不構成投資建議。投資有風險，請自行判斷。
+              </p>
+            </div>
           </div>
         </div>
       </footer>

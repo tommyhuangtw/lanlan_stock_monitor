@@ -45,36 +45,30 @@ function ThankYouContent() {
           </p>
         </div>
 
+        {/* Check Email CTA */}
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-8 text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 mb-4">
+            <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">打開信箱查看你的第一封摘要</h3>
+          <p className="text-slate-400 text-sm mb-1">
+            我們已將一封範例摘要寄到 <span className="text-amber-400 font-medium">{email}</span>
+          </p>
+          <p className="text-emerald-400/80 text-sm font-medium">
+            點擊信中的「登入帳戶」按鈕即可進入控制台
+          </p>
+        </div>
+
         {/* Timeline Card */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-8 mb-8">
           <h3 className="font-semibold text-white mb-6">接下來會發生什麼？</h3>
 
           <div className="space-y-6">
             <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium text-white">現在</p>
-                <p className="text-sm text-slate-400">歡迎郵件已發送到你的信箱</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
               <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold">
                 1
-              </div>
-              <div>
-                <p className="font-medium text-white">明天</p>
-                <p className="text-sm text-slate-400">收到第一封每日摘要</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold">
-                2
               </div>
               <div>
                 <p className="font-medium text-white">前 7 天</p>
@@ -84,7 +78,7 @@ function ThankYouContent() {
 
             <div className="flex gap-4">
               <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold">
-                3
+                2
               </div>
               <div>
                 <p className="font-medium text-slate-400">第 8 天起</p>

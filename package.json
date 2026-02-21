@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "pipeline": "tsx scripts/daily-pipeline.ts"
+    "pipeline": "tsx scripts/daily-pipeline.ts",
+    "pipeline:test": "tsx scripts/test-pipeline.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

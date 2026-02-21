@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [notRegistered, setNotRegistered] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,6 +37,10 @@ export default function LoginPage() {
         throw new Error(data.error || '發送失敗');
       }
 
+      if (data.registered === false) {
+        setNotRegistered(true);
+        return;
+      }
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤，請稍後再試');
@@ -64,7 +69,37 @@ export default function LoginPage() {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-16">
-        {sent ? (
+        {notRegistered ? (
+          // Not registered state
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 mb-6">
+              <svg className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-3">此 Email 尚未註冊</h1>
+            <p className="text-slate-400 mb-2">
+              <span className="text-amber-400 font-medium">{email}</span>
+            </p>
+            <p className="text-slate-500 text-sm mb-8">
+              需要先建立帳戶才能登入
+            </p>
+            <div className="flex flex-col gap-3">
+              <Link href="/signup">
+                <Button className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-12 cursor-pointer">
+                  免費註冊
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                onClick={() => { setNotRegistered(false); setEmail(''); }}
+                className="border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                使用其他 Email
+              </Button>
+            </div>
+          </div>
+        ) : sent ? (
           // Success state
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">

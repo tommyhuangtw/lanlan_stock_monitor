@@ -32,10 +32,10 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !user) {
-      // Don't reveal if email exists or not for security
       return NextResponse.json({
         success: true,
-        message: '如果此 Email 已註冊，你將收到登入連結'
+        registered: false,
+        message: '此 Email 尚未註冊'
       });
     }
 
@@ -92,7 +92,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: '如果此 Email 已註冊，你將收到登入連結'
+      registered: true,
+      message: '登入連結已發送'
     });
   } catch (error) {
     console.error('Send magic link error:', error);

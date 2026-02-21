@@ -92,19 +92,19 @@ export async function sendEmails(): Promise<SendEmailsResult> {
     );
 
     // Determine if should send
-    // paid = daily, free trial (< 3 days) = daily, free after trial = Monday only
+    // paid = daily, free trial (< 7 days) = daily, free after trial = Monday only
     let shouldSend = false;
 
     if (user.is_paid) {
       shouldSend = true;
-    } else if (daysSinceSignup < 3) {
+    } else if (daysSinceSignup < 7) {
       shouldSend = true;
     } else if (isMonday) {
       shouldSend = true;
     }
 
-    // Day 3: send trial-end reminder email for free users
-    if (!user.is_paid && daysSinceSignup === 3) {
+    // Day 7: send trial-end reminder email for free users
+    if (!user.is_paid && daysSinceSignup === 7) {
       try {
         // Check if already sent trial_end email
         const { data: alreadySentTrialEnd } = await supabaseAdmin
@@ -201,7 +201,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
       let emailHtml = injectMagicLinkToHtml(digest.html_template, magicLinkUrl, unsubscribeUrl);
 
       // Inject trial CTA for free trial users
-      if (!user.is_paid && daysSinceSignup < 3) {
+      if (!user.is_paid && daysSinceSignup < 7) {
         const upgradeUrl = `${baseUrl}/upgrade`;
         const trialCta = generateTrialCta(daysSinceSignup, upgradeUrl);
         emailHtml = emailHtml.replace('</body>', `${trialCta}</body>`);
@@ -259,24 +259,26 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 }
 
 function generateTrialCta(daysSinceSignup: number, upgradeUrl: string): string {
-  const daysLeft = 3 - daysSinceSignup;
+  const daysLeft = 7 - daysSinceSignup;
 
-  const messages: Record<number, { text: string; subtext: string }> = {
-    0: {
-      text: '你正在免費體驗每日摘要，還剩 3 天',
-      subtext: '3 天內升級享前兩個月 NT$99/月 優惠',
-    },
-    1: {
-      text: '免費體驗還剩 2 天',
-      subtext: '3 天內升級享前兩個月 NT$99/月 優惠',
-    },
-    2: {
+  let msg: { text: string; subtext: string };
+
+  if (daysLeft <= 1) {
+    msg = {
       text: '最後一天！明天起改為每週一封',
       subtext: '立即升級繼續每天收到，前兩個月只要 NT$99/月',
-    },
-  };
-
-  const msg = messages[daysSinceSignup] || messages[0];
+    };
+  } else if (daysLeft <= 3) {
+    msg = {
+      text: `免費體驗還剩 ${daysLeft} 天`,
+      subtext: '7 天內升級享前兩個月 NT$99/月 優惠',
+    };
+  } else {
+    msg = {
+      text: `你正在免費體驗每日摘要，還剩 ${daysLeft} 天`,
+      subtext: '7 天內升級享前兩個月 NT$99/月 優惠',
+    };
+  }
 
   return `
     <div style="max-width: 560px; margin: 16px auto 0; padding: 0 20px;">
@@ -303,7 +305,7 @@ function generateTrialEndEmail(magicLinkUrl: string, upgradeUrl: string, unsubsc
     <div style="text-align: center; margin-bottom: 32px;">
       <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
       <h1 style="color: #FFFFFF; font-size: 22px; margin: 0 0 8px 0;">你的每日摘要體驗已結束</h1>
-      <p style="color: #94A3B8; font-size: 14px; margin: 0;">過去 3 天，你每天都收到了最新的投資摘要</p>
+      <p style="color: #94A3B8; font-size: 14px; margin: 0;">過去 7 天，你每天都收到了最新的投資摘要</p>
     </div>
 
     <!-- What changes -->

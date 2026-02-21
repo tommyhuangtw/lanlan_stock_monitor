@@ -33,7 +33,7 @@ function UpgradeContent() {
         const daysSinceSignup = Math.floor(
           (Date.now() - new Date(data.user.created_at).getTime()) / (1000 * 60 * 60 * 24)
         );
-        setDaysLeft(daysSinceSignup < 3 ? 3 - daysSinceSignup : 0);
+        setDaysLeft(daysSinceSignup < 7 ? 7 - daysSinceSignup : 0);
       } catch {
         router.push('/login');
         return;

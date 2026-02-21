@@ -35,7 +35,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">3. 訂閱方案</h2>
             <ul className="list-disc pl-6 space-y-2 text-slate-400">
-              <li><strong className="text-slate-300">免費版</strong> — 前 3 天每日摘要，之後每週一收到摘要報告。</li>
+              <li><strong className="text-slate-300">免費版</strong> — 前 7 天每日摘要，之後每週一收到摘要報告。</li>
               <li><strong className="text-slate-300">專業版（NT$199/月）</strong> — 每日收到最新摘要報告，可隨時取消。</li>
             </ul>
           </section>

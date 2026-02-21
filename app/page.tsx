@@ -54,7 +54,7 @@ export default function HomePage() {
             </Button>
           </Link>
           <p className="text-slate-500 text-sm">
-            免費試用 3 天，無需信用卡
+            免費試用 7 天，無需信用卡
           </p>
         </div>
 
@@ -256,7 +256,7 @@ export default function HomePage() {
                 <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                前 3 天每日摘要
+                前 7 天每日摘要
               </li>
               <li className="flex items-center gap-3">
                 <svg className="w-5 h-5 text-emerald-400/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

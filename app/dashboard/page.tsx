@@ -162,7 +162,7 @@ function DashboardContent() {
         ? '已排定取消，本期結束後降為免費版'
         : '每日摘要';
     }
-    return daysAsMember < 3 ? '每日摘要（試用中）' : '每週摘要';
+    return daysAsMember < 7 ? '每日摘要（試用中）' : '每週摘要';
   };
 
   return (
@@ -262,12 +262,12 @@ function DashboardContent() {
         </div>
 
         {/* Trial Promo Banner */}
-        {!user?.is_paid && daysAsMember < 3 && (
+        {!user?.is_paid && daysAsMember < 7 && (
           <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 rounded-2xl border border-amber-500/30 p-5 mb-8">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <p className="text-amber-400 font-semibold text-sm mb-1">
-                  限時優惠（還剩 {3 - daysAsMember} 天）
+                  限時優惠（還剩 {7 - daysAsMember} 天）
                 </p>
                 <p className="text-white text-lg font-bold">
                   <span className="text-slate-500 line-through text-sm font-normal mr-2">NT$199/月</span>

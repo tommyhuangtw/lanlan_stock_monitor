@@ -267,7 +267,7 @@ function injectWelcomeHeader(
           <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！以下是最新一期的投資摘要</p>
         </div>
         <div style="margin-bottom: 16px;">
-          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 3 天</p>
+          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
           <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
         </div>
         <div>
@@ -374,7 +374,7 @@ function generateWelcomeEmailWithExample(
           <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！</p>
         </div>
         <div style="margin-bottom: 16px;">
-          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 3 天</p>
+          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
           <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
         </div>
         <div>
@@ -405,7 +405,7 @@ function generateWelcomeEmailWithExample(
 
     <!-- Upgrade -->
     <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">限時優惠：3 天內升級享特價</p>
+      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">限時優惠：7 天內升級享特價</p>
       <p style="color: #FFFFFF; font-size: 20px; font-weight: 700; margin: 0 0 4px 0;">前兩個月只要 NT$99/月</p>
       <p style="color: #94A3B8; font-size: 13px; margin: 0 0 16px 0;">原價 NT$199/月・升級後每天收到最新摘要</p>
       <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 600; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>

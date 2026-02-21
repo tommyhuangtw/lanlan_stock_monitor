@@ -44,12 +44,12 @@ export async function POST() {
       metadata: { user_id: user.id },
     };
 
-    // Apply promotional coupon only during first 3 days (trial period)
+    // Apply promotional coupon only during first 7 days (trial period)
     const daysSinceSignup = Math.floor(
       (Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    if (process.env.STRIPE_PROMO_COUPON_ID && daysSinceSignup < 3) {
+    if (process.env.STRIPE_PROMO_COUPON_ID && daysSinceSignup < 7) {
       sessionParams.discounts = [{ coupon: process.env.STRIPE_PROMO_COUPON_ID }];
     }
 

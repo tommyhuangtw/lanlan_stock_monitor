@@ -13,6 +13,7 @@ interface User {
   is_paid: boolean;
   created_at: string;
   subscription_cancel_at_period_end?: boolean;
+  is_unsubscribed?: boolean;
 }
 
 interface Source {
@@ -44,6 +45,7 @@ function DashboardContent() {
   const [resuming, setResuming] = useState(false);
   const [upgraded, setUpgraded] = useState(false);
   const [message, setMessage] = useState('');
+  const [togglingEmails, setTogglingEmails] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('upgraded') === 'true') {
@@ -133,6 +135,28 @@ function DashboardContent() {
       setMessage('恢復失敗，請稍後再試');
     } finally {
       setResuming(false);
+    }
+  };
+
+  const handleToggleEmails = async () => {
+    const isCurrentlyUnsubscribed = user?.is_unsubscribed;
+    if (!isCurrentlyUnsubscribed && !confirm('確定要取消訂閱 Email 嗎？你將不再收到任何郵件。')) return;
+    setTogglingEmails(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/toggle-subscription-emails', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => prev ? { ...prev, is_unsubscribed: data.is_unsubscribed } : prev);
+        setMessage(data.is_unsubscribed ? '已取消訂閱，將不再收到 Email' : '已重新訂閱，將繼續收到 Email');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage(data.error || '操作失敗，請稍後再試');
+      }
+    } catch {
+      setMessage('操作失敗，請稍後再試');
+    } finally {
+      setTogglingEmails(false);
     }
   };
 
@@ -252,13 +276,13 @@ function DashboardContent() {
                 >
                   {cancelling ? '處理中...' : '取消訂閱'}
                 </Button>
-              ) : (
+              ) : daysAsMember >= 7 ? (
                 <Link href="/upgrade">
                   <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold text-sm cursor-pointer" size="sm">
                     升級專業版
                   </Button>
                 </Link>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -336,6 +360,32 @@ function DashboardContent() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Email Subscription Toggle */}
+        <div className="mt-8 text-center">
+          {user?.is_unsubscribed ? (
+            <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-4 flex items-center justify-between">
+              <p className="text-sm text-slate-400">你已取消訂閱 Email，將不再收到任何郵件</p>
+              <Button
+                variant="ghost"
+                onClick={handleToggleEmails}
+                disabled={togglingEmails}
+                className="text-amber-400 hover:text-amber-300 text-sm cursor-pointer"
+                size="sm"
+              >
+                {togglingEmails ? '處理中...' : '重新訂閱'}
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={handleToggleEmails}
+              disabled={togglingEmails}
+              className="text-sm text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+            >
+              {togglingEmails ? '處理中...' : '取消訂閱 Email'}
+            </button>
+          )}
         </div>
       </div>
     </div>

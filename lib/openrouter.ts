@@ -243,7 +243,7 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 
 ## 輸出要求：
 - 所有 reason、summary、key_insights、episodeHighlights、riskAlerts 必須用繁體中文撰寫
-- ticker 保持原始股票代號（如 AAPL、TSLA、2330.TW）
+- ticker 欄位：美股保持代號（如 AAPL、TSLA）；台股請用「中文名 (代號)」格式（如「台積電 (2330)」、「聯發科 (2454)」），不要加 .TW 後綴
 - confidence 使用英文（high/medium/low）
 - type 使用英文（bullish/bearish/monitor）
 - timeHorizon 使用英文（short/medium/long）
@@ -306,7 +306,7 @@ export function toLegacyFormat(analysis: AnalysisResult): LegacyAnalysisResult {
 
   return {
     summary: analysis.summary,
-    key_points: analysis.episodeHighlights.slice(0, 5),
+    key_points: (analysis.episodeHighlights || []).slice(0, 5),
     stocks_mentioned,
     sentiment,
   };
@@ -357,7 +357,7 @@ const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）
   "totalSources": 數字,
   "bullishSignals": [
     {
-      "ticker": "股票代號",
+      "ticker": "股票代號（台股用「中文名 (代號)」如「台積電 (2330)」，美股用代號如 AAPL）",
       "consensus": "單一來源/KOL 共識/KOL 分歧",
       "sources": [
         { "kol": "來源名稱", "reason": "看漲理由", "action": "操作", "confidence": "high/medium/low" }

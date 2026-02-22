@@ -54,6 +54,7 @@ export async function GET() {
         selected_sources: user.selected_sources,
         created_at: user.created_at,
         subscription_cancel_at_period_end: cancelAtPeriodEnd,
+        is_unsubscribed: user.is_unsubscribed || false,
       }
     });
   } catch (error) {

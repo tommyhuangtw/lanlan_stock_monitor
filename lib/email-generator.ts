@@ -79,7 +79,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   const episodes = report.episodeSummaries || [];
 
   // Header
-  const header = `<div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:32px 16px;border-radius:12px 12px 0 0;text-align:center;"><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">📊 懶懶財經速報</h1><p style="color:#e0e6f0;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
+  const header = `<div style="background:linear-gradient(135deg,#1e3a5f 0%,#234e78 50%,#2a6298 100%);padding:32px 16px;border-radius:12px 12px 0 0;text-align:center;"><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">📊 懶懶財經速報</h1><p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
 
   // Bullish signals
   let bullishHtml = '';
@@ -243,14 +243,14 @@ export function assembleEmail(
   if (quickDigest.length > 0) {
     let items = '';
     for (const point of quickDigest) {
-      items += `<li style="margin-bottom:12px; font-size:16px; color:#ffffff !important; line-height:1.6; list-style:none; padding-left:24px; position:relative;">
+      items += `<li style="margin-bottom:12px; font-size:16px; color:#333333; line-height:1.6; list-style:none; padding-left:24px; position:relative;">
                 <span style="position:absolute; left:0; top:2px;">⚡</span>${escHtml(point)}
               </li>`;
     }
     quickDigestHtml = `
     <div style="padding:16px;">
-      <div style="background-color:#1a1a2e; background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%); padding:20px; border-radius:12px;">
-        <h2 style="color:#ffffff !important; font-size:18px; margin:0 0 16px; font-weight:bold;">⚡ 今日快速重點</h2>
+      <div style="border-left:4px solid #6366f1; padding:20px; border-radius:0 12px 12px 0;">
+        <h2 style="color:#1a1a2e; font-size:18px; margin:0 0 16px; font-weight:bold;">⚡ 今日快速重點</h2>
         <ul style="margin:0; padding:0;">${items}</ul>
       </div>
     </div>`;
@@ -261,7 +261,7 @@ export function assembleEmail(
   if (marketMood && thermometerHtml) {
     thermometerHtml = thermometerHtml.replace(
       '<div id="market-mood" style="font-size:14px;color:#555;font-style:italic;text-align:center;"></div>',
-      `<div style="font-size:15px; color:#666; font-style:italic; text-align:center; margin-top:10px; padding:0 10px;">「${escHtml(marketMood)}」</div>`
+      `<div style="font-size:15px; color:#555; font-style:italic; text-align:center; margin-top:10px; padding:0 10px;">「${escHtml(marketMood)}」</div>`
     );
   }
 
@@ -309,6 +309,7 @@ export function assembleEmail(
   <center>
     <div class="main-card" style="max-width:600px; width:100%; margin:20px auto; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08); text-align:left;">
       ${blocks.header}
+      <!-- CTA_INJECTION_POINT -->
       ${quickDigestHtml}
       ${thermometerHtml}
       ${blocks.bullish}

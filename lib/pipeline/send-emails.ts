@@ -7,6 +7,7 @@ import {
   wasEmailSent,
   formatDateTaipei,
 } from '../digest-cache';
+import { stripe } from '../stripe';
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
@@ -85,6 +86,31 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
   for (const user of users) {
     results.usersProcessed++;
+
+    // Lazy sync: if user has stripe_customer_id but is_paid is false,
+    // check Stripe for active subscription (mirrors /api/auth/me logic)
+    if (user.stripe_customer_id && !user.is_paid) {
+      try {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: user.stripe_customer_id,
+          status: 'active',
+          limit: 1,
+        });
+        if (subscriptions.data.length > 0) {
+          await supabaseAdmin
+            .from('users')
+            .update({
+              is_paid: true,
+              stripe_subscription_id: subscriptions.data[0].id,
+            })
+            .eq('id', user.id);
+          user.is_paid = true;
+          console.log(`[sendEmails] Lazy-synced is_paid=true for ${user.email}`);
+        }
+      } catch (err) {
+        console.warn(`[sendEmails] Stripe sync failed for ${user.email}:`, err);
+      }
+    }
 
     // Calculate days since signup
     const daysSinceSignup = Math.floor(

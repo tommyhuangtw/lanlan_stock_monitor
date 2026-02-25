@@ -109,7 +109,7 @@ export const openrouter = new OpenAI({
 
 // Model configuration - matching n8n workflow
 // Pro model for heavy analysis/consolidation tasks
-export const PRO_MODEL = 'google/gemini-3-pro-preview';
+export const PRO_MODEL = 'google/gemini-3.1-pro-preview';
 // Flash model for lighter tasks (quick digest, simple processing)
 export const FLASH_MODEL = 'google/gemini-3-flash-preview';
 
@@ -160,15 +160,16 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 包括 summary、episodeHighlights、riskAlerts、key_insights 等所有文字欄位。
 絕對不可以出現英文句子。股票代號（如 AAPL、TSLA）和公司專有名詞除外。
 
-你是一位專業的財經分析師，專門分析台灣投資 Podcast 及 YouTube 內容。
+你是一位專業的財經分析師，專門分析中文和英文的投資 Podcast 及 YouTube 內容。即使轉錄文字是英文，所有輸出仍必須使用繁體中文。
 
 ⚠️ 重要：所有輸出內容必須使用繁體中文。
 
 請仔細分析以下轉錄文字，針對每一集提取以下資訊：
 
 ## 擷取原則：
-⚠️ 盡可能完整提取所有投資相關資訊，寧可多收錄也不要遺漏。
-對於不確定是否為明確訊號的內容，以 low 或 medium confidence 收錄，讓下游整合階段決定是否保留。
+⚠️ 只收錄 KOL 有實質討論的個股，不要收錄僅被隨口提及的標的。
+判斷標準：KOL 是否花了至少 2-3 句話以上分析該標的？是否有明確的看法、理由、操作建議或目標價？
+如果 KOL 只是在列舉例子或順帶提到某支股票（如「像 AAPL 這種大型股...」），不要收錄為訊號。
 
 ## 擷取項目：
 
@@ -183,9 +184,9 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 - 股票代號（ticker）
 - 看漲理由（具體說明 KOL 的邏輯）
 - 信心程度：
-  - high: KOL 明確表態看好、有具體目標價或已買入
-  - medium: KOL 認為值得關注、有潛力、正在研究
-  - low: KOL 僅順帶提及、語氣偏正面但未明確表態
+  - high: KOL 明確表態看好/看空、有具體目標價、已買入/賣出
+  - medium: KOL 花了一段篇幅分析，有明確理由和邏輯
+  - ⚠️ 不要收錄 low confidence（僅順帶提及）的訊號
 - 時間框架（timeHorizon）：short/medium/long
 - 催化劑（catalyst）：即將發生的事件。若無明確催化劑則留空字串。
 - 具體價位（priceLevel）：KOL 提到的目標價、支撐位、壓力位等。若無則留空字串。
@@ -235,8 +236,10 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 - 若無則返回空陣列
 
 ## 分析原則：
-- 完整提取所有投資相關資訊，寧可多收錄也不要遺漏
-- 對於不確定是否為明確訊號的內容，以 low 或 medium confidence 收錄
+- 只收錄 KOL 有花篇幅深入討論的標的
+- 必須有明確理由（基本面、技術面、催化劑等）才收錄
+- KOL 僅一兩句帶過的標的不要收錄
+- 區分「有實質分析」vs「僅順帶提及」
 - 區分「看好」與「已買入」的差別
 - 如果 KOL 提到具體價位（目標價、停損價），請記錄在 priceLevel 欄位
 - 如果轉錄內容與投資無關，返回空的 signals 陣列
@@ -244,6 +247,7 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 ## 輸出要求：
 - 所有 reason、summary、key_insights、episodeHighlights、riskAlerts 必須用繁體中文撰寫
 - ticker 欄位：美股保持代號（如 AAPL、TSLA）；台股請用「中文名 (代號)」格式（如「台積電 (2330)」、「聯發科 (2454)」），不要加 .TW 後綴
+- ⚠️ 地區限制：只收錄美股和台股標的。不要收錄只在香港或中國A股上市的個股（如港股 .HK、滬股 .SH、深股 .SZ）。中國公司如果有在美國上市的 ADR（如 BABA、PDD、JD、BILI）則使用美股代號收錄。總經或產業趨勢提到中國市場是可以的。
 - confidence 使用英文（high/medium/low）
 - type 使用英文（bullish/bearish/monitor）
 - timeHorizon 使用英文（short/medium/long）
@@ -258,7 +262,7 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 export async function analyzeTranscript(transcript: string, episodeTitle: string, podcastName?: string): Promise<AnalysisResult> {
   const response = await openrouter.chat.completions.create({
     model: PRO_MODEL,
-    max_tokens: 4000,
+    max_tokens: 6000,
     temperature: 0.3,
     messages: [
       {
@@ -271,7 +275,7 @@ export async function analyzeTranscript(transcript: string, episodeTitle: string
 Episode: ${episodeTitle}
 
 轉錄內容：
-${transcript.slice(0, 30000)}`
+${transcript.slice(0, 40000)}`
       }
     ],
   });
@@ -357,7 +361,7 @@ const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）
   "totalSources": 數字,
   "bullishSignals": [
     {
-      "ticker": "股票代號（台股用「中文名 (代號)」如「台積電 (2330)」，美股用代號如 AAPL）",
+      "ticker": "股票代號（台股用「中文名 (代號)」如「台積電 (2330)」，美股用代號如 AAPL。⚠️ 只收錄美股和台股，不收錄港股/A股。中國公司有美股 ADR 的用美股代號如 BABA）",
       "consensus": "單一來源/KOL 共識/KOL 分歧",
       "sources": [
         { "kol": "來源名稱", "reason": "看漲理由", "action": "操作", "confidence": "high/medium/low" }
@@ -392,7 +396,9 @@ const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）
 - 直接輸出純 JSON，不要用 \`\`\`json 包裹
 - bullishSignals/bearishSignals/monitorSignals 必須從輸入的 signals 提取，不可為空（除非輸入真的沒有）
 - ⚠️ episodeSummaries 是必填欄位！每一集節目都必須有摘要（oneLiner、detailedSummary、highlights）
-- ⚠️ 看漲/看空訊號最多各保留 10 個（按重要性排序），將剩餘的歸入 monitorSignals
+- ⚠️ 看漲訊號最多保留 10 個，看空訊號最多保留 8 個（按重要性排序）
+- 只保留有實質分析理由的訊號，沒有明確理由的不要收錄
+- 將剩餘的歸入 monitorSignals
 - ⚠️ keyInsights、riskAlerts 也必須填寫，從各集的分析中提取`;
 
 export interface ConsolidatedReport {
@@ -493,17 +499,32 @@ function normalizeConsolidatedReport(raw: Record<string, unknown>, totalEpisodes
   // Handle date variations
   const date = (raw.date || raw.reportDate || new Date().toISOString().split('T')[0]) as string;
 
+  // Filter: only allow US and Taiwan tickers (block HK/CN-only stocks)
+  function isAllowedTicker(ticker: string): boolean {
+    const t = ticker.trim();
+    // Explicit HK/CN exchange suffixes — blocked
+    if (/\.(HK|SH|SZ)$/i.test(t)) return false;
+    // Taiwan stocks: 中文名 (4+digit code) — allowed
+    if (/[\u4e00-\u9fff].*\(\d{4,}\)/.test(t)) return true;
+    // Pure uppercase letters (1-5 chars) = US ticker — allowed
+    if (/^[A-Z]{1,5}$/.test(t)) return true;
+    // Chinese characters without TW-style code = likely CN/HK stock — blocked
+    if (/[\u4e00-\u9fff]/.test(t) && !/\(\d{4,}\)/.test(t)) return false;
+    // Default: allow
+    return true;
+  }
+
   // Handle signal variations - AI might return consolidatedSignals instead of bullish/bearish arrays
   let bullishSignals: ConsolidatedReport['bullishSignals'] = [];
   let bearishSignals: ConsolidatedReport['bearishSignals'] = [];
   const monitorSignals: ConsolidatedReport['monitorSignals'] = [];
 
-  // If AI returned separate arrays
+  // If AI returned separate arrays — filter out disallowed tickers
   if (Array.isArray(raw.bullishSignals)) {
-    bullishSignals = raw.bullishSignals as ConsolidatedReport['bullishSignals'];
+    bullishSignals = (raw.bullishSignals as ConsolidatedReport['bullishSignals']).filter(s => isAllowedTicker(s.ticker));
   }
   if (Array.isArray(raw.bearishSignals)) {
-    bearishSignals = raw.bearishSignals as ConsolidatedReport['bearishSignals'];
+    bearishSignals = (raw.bearishSignals as ConsolidatedReport['bearishSignals']).filter(s => isAllowedTicker(s.ticker));
   }
   if (Array.isArray(raw.monitorSignals)) {
     monitorSignals.push(...(raw.monitorSignals as ConsolidatedReport['monitorSignals']));
@@ -527,6 +548,8 @@ function normalizeConsolidatedReport(raw: Record<string, unknown>, totalEpisodes
         priceLevel: (sig.priceLevel || '') as string,
         divergence: (sig.divergence || '') as string,
       };
+
+      if (!isAllowedTicker(normalizedSig.ticker)) continue;
 
       if (direction === 'bullish' || (sig.sources as Array<Record<string, unknown>>)?.some(s => s.sentiment === 'bullish')) {
         bullishSignals.push(normalizedSig);

@@ -184,19 +184,25 @@ export async function saveDigestContent(
     quickDigest: string[];
     marketMood: string;
     htmlTemplate: string;
+    marketBrief?: string;
   }
 ): Promise<void> {
+  const updateData: Record<string, unknown> = {
+    episode_ids: content.episodeIds,
+    consolidated_report: content.consolidatedReport,
+    quick_digest: content.quickDigest,
+    market_mood: content.marketMood,
+    html_template: content.htmlTemplate,
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+  };
+  if (content.marketBrief !== undefined) {
+    updateData.market_brief = content.marketBrief;
+  }
+
   const { error } = await supabase
     .from('daily_digests')
-    .update({
-      episode_ids: content.episodeIds,
-      consolidated_report: content.consolidatedReport,
-      quick_digest: content.quickDigest,
-      market_mood: content.marketMood,
-      html_template: content.htmlTemplate,
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', digestId);
 
   if (error) {

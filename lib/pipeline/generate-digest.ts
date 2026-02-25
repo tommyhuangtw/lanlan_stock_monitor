@@ -10,6 +10,7 @@ import {
   markDigestGenerating,
   formatDateTaipei,
 } from '../digest-cache';
+import { generateMarketBrief, MarketBrief } from '../stock-research';
 
 export interface GenerateDigestResult {
   digestGenerated: boolean;
@@ -74,6 +75,14 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
   // Mark as generating
   await markDigestGenerating(supabaseAdmin, digestId);
 
+  // Generate daily market brief (always runs, even with 0 episodes)
+  let marketBriefData: MarketBrief = { content: '', citations: [] };
+  try {
+    marketBriefData = await generateMarketBrief();
+  } catch (error) {
+    console.error('[generateDigest] Market brief failed, continuing without:', error);
+  }
+
   // Only include episodes published within the last 24 hours
   const cutoffHours = 24;
   const cutoffDate = new Date(today.getTime() - cutoffHours * 60 * 60 * 1000);
@@ -126,88 +135,122 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
   }
   const analyses = Array.from(latestBySource.values());
 
-  if (analyses.length === 0) {
+  const hasEpisodes = analyses.length > 0;
+  const hasMarketBrief = marketBriefData.content.length > 0;
+
+  // If no episodes AND no market brief, mark as no content
+  if (!hasEpisodes && !hasMarketBrief) {
     await markDigestNoContent(supabaseAdmin, digestId);
     return results;
   }
 
   results.episodeCount = analyses.length;
 
-  // Transform analyses for consolidation
-  const analysesForConsolidation = analyses.map(analysis => {
-    const episode = analysis.episodes as unknown as {
-      id: number;
-      title: string;
-      audio_url: string;
-      sources: { id: string; name: string };
-    };
+  // Build consolidated report (only if episodes exist)
+  let consolidatedReport: import('../openrouter').ConsolidatedReport;
+  let quickDigest: string[] = [];
+  let marketMood = '';
+  const episodeIds: number[] = [];
 
-    let analysisResult: AnalysisResult;
-
-    if (analysis.full_analysis) {
-      analysisResult = analysis.full_analysis as AnalysisResult;
-    } else {
-      const signals = (analysis.stocks_mentioned || []).map((stock: { ticker: string; sentiment: string; context: string }) => ({
-        type: stock.sentiment === 'bullish' ? 'bullish' as const :
-              stock.sentiment === 'bearish' ? 'bearish' as const : 'monitor' as const,
-        ticker: stock.ticker,
-        reason: stock.context || '',
-        confidence: 'medium' as const,
-        action: '無',
-        timeHorizon: 'medium' as const,
-        catalyst: '',
-        priceLevel: '',
-      }));
-
-      analysisResult = {
-        signals,
-        key_insights: [],
-        overall_sentiment: analysis.sentiment === 'bullish' ? 'bullish' :
-                          analysis.sentiment === 'bearish' ? 'bearish' : 'neutral',
-        summary: analysis.summary || '',
-        episodeHighlights: analysis.key_points || [],
-        riskAlerts: [],
-        catalysts: [],
-        podcastName: episode?.sources?.name || 'Unknown',
+  if (hasEpisodes) {
+    // Transform analyses for consolidation
+    const analysesForConsolidation = analyses.map(analysis => {
+      const episode = analysis.episodes as unknown as {
+        id: number;
+        title: string;
+        audio_url: string;
+        sources: { id: string; name: string };
       };
-    }
 
-    return {
-      analysis: analysisResult,
-      episodeTitle: episode?.title || 'Unknown',
-      podcastName: episode?.sources?.name || 'Unknown',
-      episodeLink: episode?.audio_url,
-      episodeId: episode?.id,
+      let analysisResult: AnalysisResult;
+
+      if (analysis.full_analysis) {
+        analysisResult = analysis.full_analysis as AnalysisResult;
+      } else {
+        const signals = (analysis.stocks_mentioned || []).map((stock: { ticker: string; sentiment: string; context: string }) => ({
+          type: stock.sentiment === 'bullish' ? 'bullish' as const :
+                stock.sentiment === 'bearish' ? 'bearish' as const : 'monitor' as const,
+          ticker: stock.ticker,
+          reason: stock.context || '',
+          confidence: 'medium' as const,
+          action: '無',
+          timeHorizon: 'medium' as const,
+          catalyst: '',
+          priceLevel: '',
+        }));
+
+        analysisResult = {
+          signals,
+          key_insights: [],
+          overall_sentiment: analysis.sentiment === 'bullish' ? 'bullish' :
+                            analysis.sentiment === 'bearish' ? 'bearish' : 'neutral',
+          summary: analysis.summary || '',
+          episodeHighlights: analysis.key_points || [],
+          riskAlerts: [],
+          catalysts: [],
+          podcastName: episode?.sources?.name || 'Unknown',
+        };
+      }
+
+      return {
+        analysis: analysisResult,
+        episodeTitle: episode?.title || 'Unknown',
+        podcastName: episode?.sources?.name || 'Unknown',
+        episodeLink: episode?.audio_url,
+        episodeId: episode?.id,
+      };
+    });
+
+    episodeIds.push(
+      ...analysesForConsolidation.map(a => a.episodeId).filter((id): id is number => id !== undefined)
+    );
+
+    // Consolidate reports (calls OpenRouter)
+    consolidatedReport = await consolidateReports(
+      analysesForConsolidation.map(a => ({
+        analysis: a.analysis,
+        episodeTitle: a.episodeTitle,
+        podcastName: a.podcastName,
+        episodeLink: a.episodeLink,
+      }))
+    );
+
+    // Generate quick digest (calls OpenRouter)
+    const quickDigestResult = await generateQuickDigest(consolidatedReport);
+    quickDigest = quickDigestResult.quickDigest;
+    marketMood = quickDigestResult.marketMood;
+
+  } else {
+    // Market-brief-only digest (no episodes)
+    consolidatedReport = {
+      date: dateStr,
+      totalSources: 0,
+      bullishSignals: [],
+      bearishSignals: [],
+      monitorSignals: [],
+      keyInsights: [],
+      riskAlerts: [],
+      upcomingCatalysts: [],
+      episodeSummaries: [],
     };
-  });
+  }
 
-  // Consolidate reports (calls OpenRouter)
-  const consolidatedReport = await consolidateReports(
-    analysesForConsolidation.map(a => ({
-      analysis: a.analysis,
-      episodeTitle: a.episodeTitle,
-      podcastName: a.podcastName,
-      episodeLink: a.episodeLink,
-    }))
-  );
-
-  // Generate quick digest (calls OpenRouter)
-  const { quickDigest, marketMood } = await generateQuickDigest(consolidatedReport);
-
-  // Generate HTML template (no API call)
+  // Generate HTML template
   const htmlTemplate = generateHtmlTemplateWithoutMagicLink(
     consolidatedReport,
     quickDigest,
-    marketMood
+    marketMood,
+    marketBriefData
   );
 
   // Save to database
   await saveDigestContent(supabaseAdmin, digestId, {
-    episodeIds: analysesForConsolidation.map(a => a.episodeId).filter((id): id is number => id !== undefined),
+    episodeIds,
     consolidatedReport,
     quickDigest,
     marketMood,
     htmlTemplate,
+    marketBrief: marketBriefData.content,
   });
 
   results.digestGenerated = true;

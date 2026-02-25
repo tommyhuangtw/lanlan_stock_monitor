@@ -4,6 +4,7 @@
  */
 
 import { ConsolidatedReport } from './openrouter';
+import type { MarketBrief } from './stock-research';
 
 function escHtml(str: string | undefined | null): string {
   if (!str) return '';
@@ -11,7 +12,8 @@ function escHtml(str: string | undefined | null): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function timeHorizonTag(th: string): string {
@@ -53,6 +55,8 @@ function priceLevelBlock(pl: string | undefined): string {
 export interface HtmlBlocks {
   header: string;
   thermometer: string;
+  bullCount: number;
+  bearCount: number;
   bullish: string;
   bearish: string;
   risk: string;
@@ -173,8 +177,20 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   // Episode summaries
   let episodesHtml = '';
   if (episodes.length > 0) {
+    // Sort episodes: 財經浩角翔起 first, Gooaye/股癌 second, 娜娜說美股 last, others in middle
+    const sortedEpisodes = [...episodes].sort((a, b) => {
+      const priority = (ep: typeof a): number => {
+        const name = ep.podcast.toLowerCase();
+        if (name.includes('皓角') || name.includes('財經') || name.includes('finance-horn')) return 0;
+        if (name.includes('gooaye') || name.includes('股癌')) return 1;
+        if (name.includes('nana') || name.includes('娜娜')) return 9;
+        return 5;
+      };
+      return priority(a) - priority(b);
+    });
+
     let cards = '';
-    for (const ep of episodes) {
+    for (const ep of sortedEpisodes) {
       const icon = ep.source === 'youtube' ? '🎬' : '🎧';
       const linkColor = ep.source === 'youtube' ? '#e74c3c' : '#8e44ad';
       const linkText = ep.source === 'youtube' ? '🎬 前往觀看' : '🎧 前往收聽';
@@ -185,7 +201,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         for (const h of ep.highlights) {
           hItems += `<li style="margin-bottom:6px;font-size:14px;color:#333;list-style:none;padding-left:16px;position:relative;"><span style="position:absolute;left:0;color:#27ae60;">●</span>${escHtml(h)}</li>`;
         }
-        highlightsHtml = `<ul style="margin:12px 0;padding:0;">${hItems}</ul>`;
+        highlightsHtml = `<ul style="margin:12px 0;padding:0;list-style:none;">${hItems}</ul>`;
       }
 
       const summaryText = ep.detailedSummary || ep.oneLiner || '';
@@ -193,8 +209,9 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         ? `<div style="margin-top:10px;padding:12px;background:#f8f9fa;border-radius:6px;font-size:13px;color:#555;line-height:1.6;word-break:break-word;">${escHtml(summaryText)}</div>`
         : '';
 
-      const linkBtn = ep.episodeLink
-        ? `<div style="margin-top:14px;text-align:center;"><a href="${escHtml(ep.episodeLink)}" target="_blank" style="display:block;padding:10px 24px;background:${linkColor};color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;text-align:center;max-width:100%;">${linkText}</a></div>`
+      const safeLink = ep.episodeLink && /^https?:\/\//.test(ep.episodeLink) ? ep.episodeLink : '';
+      const linkBtn = safeLink
+        ? `<div style="margin-top:14px;text-align:center;"><a href="${escHtml(safeLink)}" target="_blank" style="display:block;padding:10px 24px;background:${linkColor};color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;text-align:center;max-width:100%;">${linkText}</a></div>`
         : '';
 
       cards += `<div style="background:#fff;padding:20px 16px;margin-bottom:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><span style="font-size:24px;margin-right:10px;">${icon}</span><div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:700;color:#333;word-break:break-word;">${escHtml(ep.podcast)}</div><div style="font-size:13px;color:#888;margin-top:2px;word-break:break-word;">${escHtml(ep.episode)}</div></div></div>${highlightsHtml}${summaryHtml}${linkBtn}</div>`;
@@ -216,6 +233,8 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   return {
     header,
     thermometer,
+    bullCount,
+    bearCount,
     bullish: bullishHtml,
     bearish: bearishHtml,
     risk: riskHtml,
@@ -228,6 +247,99 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
 }
 
 /**
+ * Build integrated "今日總覽" section combining thermometer, quick digest, and market brief.
+ */
+function buildOverviewSection(
+  blocks: HtmlBlocks,
+  quickDigest: string[],
+  marketMood: string,
+  marketBrief?: MarketBrief,
+): string {
+  const { bullCount, bearCount } = blocks;
+  const total = bullCount + bearCount || 1;
+  const bullPct = Math.round((bullCount / total) * 100);
+  const bearPct = 100 - bullPct;
+
+  // Thermometer bar
+  const thermometerBar = `
+    <div style="margin-bottom:4px;">
+      <div style="display:flex;align-items:center;">
+        <span style="font-size:13px;color:#16a34a;font-weight:700;margin-right:8px;white-space:nowrap;">看漲 ${bullCount}</span>
+        <div style="flex:1;min-width:0;height:22px;border-radius:11px;overflow:hidden;display:flex;background:#e2e8f0;">
+          <div style="width:${bullPct}%;background:linear-gradient(90deg,#22c55e,#4ade80);height:100%;"></div>
+          <div style="width:${bearPct}%;background:linear-gradient(90deg,#ef4444,#f87171);height:100%;"></div>
+        </div>
+        <span style="font-size:13px;color:#dc2626;font-weight:700;margin-left:8px;white-space:nowrap;">看空 ${bearCount}</span>
+      </div>
+    </div>`;
+
+  const moodLine = marketMood
+    ? `<div style="font-size:14px;color:#64748b;font-style:italic;text-align:center;margin-top:6px;">「${escHtml(marketMood)}」</div>`
+    : '';
+
+  // Quick digest bullets
+  let quickDigestBlock = '';
+  if (quickDigest.length > 0) {
+    let items = '';
+    for (const point of quickDigest) {
+      items += `<li style="margin-bottom:10px;font-size:15px;color:#334155;line-height:1.6;list-style:none;padding-left:22px;position:relative;">
+        <span style="position:absolute;left:0;top:2px;color:#ca8a04;">⚡</span>${escHtml(point)}
+      </li>`;
+    }
+    quickDigestBlock = `
+      <div style="border-top:1px solid #e2e8f0;margin:16px 0;"></div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#334155;margin:0 0 10px;">⚡ 快速重點</div>
+        <ul style="margin:0;padding:0;">${items}</ul>
+      </div>`;
+  }
+
+  // Market brief bullets
+  let marketBriefBlock = '';
+  if (marketBrief?.content) {
+    const lines = marketBrief.content.split('\n').filter(l => l.trim());
+    let itemsHtml = '';
+    for (const line of lines) {
+      if (!/^[•\-\*]/.test(line.trim())) continue;
+      const text = line.replace(/^[•\-\*]\s*/, '').trim();
+      if (!text) continue;
+      const titleMatch = text.match(/^\*\*(.+?)\*\*[：:]\s*(.*)/);
+      let rendered: string;
+      if (titleMatch) {
+        rendered = `<strong style="color:#0f172a;">${escHtml(titleMatch[1])}</strong><span style="color:#64748b;">：${escHtml(titleMatch[2])}</span>`;
+      } else {
+        rendered = `<span style="color:#334155;">${escHtml(text)}</span>`;
+      }
+      itemsHtml += `<li style="margin-bottom:8px;font-size:13px;line-height:1.6;">${rendered}</li>`;
+    }
+    if (itemsHtml) {
+      marketBriefBlock = `
+        <div style="border-top:1px solid #e2e8f0;margin:16px 0;"></div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#2563eb;margin:0 0 10px;">🌐 全球財經動態</div>
+          <ul style="margin:0;padding-left:18px;color:#334155;">${itemsHtml}</ul>
+          <div style="margin-top:8px;font-size:10px;color:#94a3b8;font-style:italic;">由 AI 自動整理最新財經情報</div>
+        </div>`;
+    }
+  }
+
+  // If nothing to show, return empty
+  const hasContent = quickDigest.length > 0 || marketBrief?.content;
+  if (!hasContent && bullCount === 0 && bearCount === 0) return '';
+
+  return `
+  <div style="padding:20px 16px;">
+    <div style="background:#f8fafc;border-radius:12px;padding:20px;border:1px solid #e2e8f0;">
+      <h2 style="color:#0f172a;font-size:18px;font-weight:700;margin:0 0 14px;">📊 今日總覽</h2>
+      ${thermometerBar}
+      ${moodLine}
+      ${quickDigestBlock}
+      ${marketBriefBlock}
+    </div>
+  </div>`;
+}
+
+/**
  * Assemble full email HTML
  * Matching n8n "組裝Email" node
  */
@@ -236,34 +348,11 @@ export function assembleEmail(
   quickDigest: string[],
   marketMood: string,
   manageLinkUrl?: string,
-  unsubscribeLinkUrl?: string
+  unsubscribeLinkUrl?: string,
+  marketBrief?: MarketBrief,
 ): string {
-  // Generate quick digest HTML
-  let quickDigestHtml = '';
-  if (quickDigest.length > 0) {
-    let items = '';
-    for (const point of quickDigest) {
-      items += `<li style="margin-bottom:12px; font-size:16px; color:#333333; line-height:1.6; list-style:none; padding-left:24px; position:relative;">
-                <span style="position:absolute; left:0; top:2px;">⚡</span>${escHtml(point)}
-              </li>`;
-    }
-    quickDigestHtml = `
-    <div style="padding:16px;">
-      <div style="border-left:4px solid #6366f1; padding:20px; border-radius:0 12px 12px 0;">
-        <h2 style="color:#1a1a2e; font-size:18px; margin:0 0 16px; font-weight:bold;">⚡ 今日快速重點</h2>
-        <ul style="margin:0; padding:0;">${items}</ul>
-      </div>
-    </div>`;
-  }
-
-  // Add market mood to thermometer
-  let thermometerHtml = blocks.thermometer;
-  if (marketMood && thermometerHtml) {
-    thermometerHtml = thermometerHtml.replace(
-      '<div id="market-mood" style="font-size:14px;color:#555;font-style:italic;text-align:center;"></div>',
-      `<div style="font-size:15px; color:#555; font-style:italic; text-align:center; margin-top:10px; padding:0 10px;">「${escHtml(marketMood)}」</div>`
-    );
-  }
+  // Build integrated "今日總覽" overview section
+  const overviewHtml = buildOverviewSection(blocks, quickDigest, marketMood, marketBrief);
 
   // Add manage subscription link section
   const unsubscribeHtml = unsubscribeLinkUrl
@@ -310,8 +399,7 @@ export function assembleEmail(
     <div class="main-card" style="max-width:600px; width:100%; margin:20px auto; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08); text-align:left;">
       ${blocks.header}
       <!-- CTA_INJECTION_POINT -->
-      ${quickDigestHtml}
-      ${thermometerHtml}
+      ${overviewHtml}
       ${blocks.bullish}
       ${blocks.bearish}
       ${blocks.risk}
@@ -359,10 +447,11 @@ export const UNSUBSCRIBE_LINK_PLACEHOLDER = '{{UNSUBSCRIBE_URL}}';
 export function generateHtmlTemplateWithoutMagicLink(
   report: ConsolidatedReport,
   quickDigest: string[],
-  marketMood: string
+  marketMood: string,
+  marketBrief?: MarketBrief
 ): string {
   const blocks = generateHtmlBlocks(report);
-  return assembleEmail(blocks, quickDigest, marketMood, MAGIC_LINK_PLACEHOLDER, UNSUBSCRIBE_LINK_PLACEHOLDER);
+  return assembleEmail(blocks, quickDigest, marketMood, MAGIC_LINK_PLACEHOLDER, UNSUBSCRIBE_LINK_PLACEHOLDER, marketBrief);
 }
 
 /**

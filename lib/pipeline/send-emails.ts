@@ -7,7 +7,7 @@ import {
   wasEmailSent,
   formatDateTaipei,
 } from '../digest-cache';
-import { stripe } from '../stripe';
+
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
@@ -89,9 +89,11 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
     // Lazy sync: if user has stripe_customer_id but is_paid is false,
     // check Stripe for active subscription (mirrors /api/auth/me logic)
-    if (user.stripe_customer_id && !user.is_paid) {
+    if (user.stripe_customer_id && !user.is_paid && process.env.STRIPE_SECRET_KEY) {
       try {
-        const subscriptions = await stripe.subscriptions.list({
+        const Stripe = (await import('stripe')).default;
+        const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+        const subscriptions = await stripeClient.subscriptions.list({
           customer: user.stripe_customer_id,
           status: 'active',
           limit: 1,

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { email, selectedSources } = await request.json();
+    const { email } = await request.json();
 
     // Validate input
     if (!email || !email.includes('@')) {
@@ -41,8 +41,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // selectedSources can be null (meaning all sources)
 
     // Check if user already exists
     const { data: existingUser } = await supabaseAdmin
@@ -63,7 +61,6 @@ export async function POST(request: NextRequest) {
       .from('users')
       .insert({
         email: email.toLowerCase().trim(),
-        selected_sources: selectedSources,
         is_paid: false,
       })
       .select()

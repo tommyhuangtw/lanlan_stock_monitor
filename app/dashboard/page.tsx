@@ -16,29 +16,10 @@ interface User {
   is_unsubscribed?: boolean;
 }
 
-interface Source {
-  id: string;
-  name: string;
-  type: string;
-  description: string | null;
-}
-
-const sourceImages: Record<string, string> = {
-  'gooaye': '/sources/股涯.webp',
-  'sailing-king': '/sources/美股航海王.webp',
-  'us-stock-academy': '/sources/Jenny美股投資學.webp',
-  'finance-horn': '/sources/游庭皓的財經皓角.webp',
-  'leek-graduate': '/sources/韭菜畢業班.webp',
-  'nick-us-stock': '/sources/Nick美股咖啡館.jpg',
-  'nana-us-stock': '/sources/nana說美股.jpg',
-  'sunny-finance': '/sources/陽光財經.jpg',
-};
-
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
-  const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -60,10 +41,7 @@ function DashboardContent() {
   const fetchData = async () => {
     setError(null);
     try {
-      const [userRes, sourcesRes] = await Promise.all([
-        fetch('/api/auth/me'),
-        fetch('/api/sources'),
-      ]);
+      const userRes = await fetch('/api/auth/me');
       const userData = await userRes.json();
 
       if (!userData.user) {
@@ -76,9 +54,6 @@ function DashboardContent() {
         email: userData.user.email,
         is_paid: userData.user.is_paid,
       });
-
-      const sourcesData = await sourcesRes.json();
-      setSources(sourcesData.sources || []);
     } catch {
       setError('載入資料失敗，請重新整理頁面');
     } finally {
@@ -100,14 +75,14 @@ function DashboardContent() {
   };
 
   const handleCancelSubscription = async () => {
-    if (!confirm('確定要取消訂閱嗎？取消後本期結束時將降為免費版。')) return;
+    if (!confirm('確定要降為免費方案嗎？本期結束後將不再享有每日摘要。')) return;
     setCancelling(true);
     setMessage('');
     try {
       const res = await fetch('/api/cancel-subscription', { method: 'POST' });
       if (res.ok) {
         setUser(prev => prev ? { ...prev, subscription_cancel_at_period_end: true } : prev);
-        setMessage('訂閱已取消，本期結束後將降為免費版');
+        setMessage('已排定降級，本期結束後將轉為免費方案');
       } else {
         const data = await res.json().catch(() => ({}));
         setMessage(data.error || '取消失敗，請稍後再試');
@@ -126,7 +101,7 @@ function DashboardContent() {
       const res = await fetch('/api/resume-subscription', { method: 'POST' });
       if (res.ok) {
         setUser(prev => prev ? { ...prev, subscription_cancel_at_period_end: false } : prev);
-        setMessage('已恢復訂閱');
+        setMessage('已恢復專業版');
       } else {
         const data = await res.json().catch(() => ({}));
         setMessage(data.error || '恢復失敗，請稍後再試');
@@ -195,7 +170,7 @@ function DashboardContent() {
   const getStatusText = () => {
     if (user?.is_paid) {
       return user.subscription_cancel_at_period_end
-        ? '已排定取消，本期結束後降為免費版'
+        ? '已排定降級，本期結束後轉為免費方案'
         : '每日摘要';
     }
     return daysAsMember < 7 ? '每日摘要（試用中）' : '每週摘要';
@@ -264,7 +239,7 @@ function DashboardContent() {
                   className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold text-sm cursor-pointer"
                   size="sm"
                 >
-                  {resuming ? '處理中...' : '恢復訂閱'}
+                  {resuming ? '處理中...' : '恢復專業版'}
                 </Button>
               ) : user?.is_paid ? (
                 <Button
@@ -274,7 +249,7 @@ function DashboardContent() {
                   className="text-slate-500 hover:text-red-400 text-sm cursor-pointer"
                   size="sm"
                 >
-                  {cancelling ? '處理中...' : '取消訂閱'}
+                  {cancelling ? '處理中...' : '降為免費方案'}
                 </Button>
               ) : daysAsMember >= 7 ? (
                 <Link href="/upgrade">
@@ -331,36 +306,6 @@ function DashboardContent() {
           </div>
           );
         })()}
-
-        {/* Sources List (display only) */}
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">追蹤來源</h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            {[...sources].sort((a, b) => a.type === b.type ? 0 : a.type === 'podcast' ? -1 : 1).map(source => (
-              <div
-                key={source.id}
-                className="flex items-center gap-3 p-3 rounded-xl border border-slate-700/50 bg-slate-800/30"
-              >
-                <img
-                  src={sourceImages[source.id] || ''}
-                  alt={source.name}
-                  className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                />
-                <div className="min-w-0">
-                  <h3 className="font-medium text-white text-sm leading-tight truncate">{source.name}</h3>
-                  <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full mt-1 ${
-                    source.type === 'podcast'
-                      ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                  }`}>
-                    {source.type === 'podcast' ? 'Podcast' : 'YouTube'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* Email Subscription Toggle */}
         <div className="mt-8 text-center">

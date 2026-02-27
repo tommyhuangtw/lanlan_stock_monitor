@@ -11,11 +11,7 @@ export default function HomePage() {
       <nav className="fixed top-4 left-4 right-4 z-50">
         <div className="max-w-6xl mx-auto bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
+            <img src="/icon.png" className="w-8 h-8 rounded-lg" alt="懶懶財經速報" />
             <span className="font-semibold text-white">懶懶財經速報</span>
           </div>
           <div className="flex items-center gap-4">
@@ -276,11 +272,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gradient-to-br from-amber-400 to-amber-600 rounded-md flex items-center justify-center">
-                <svg className="w-4 h-4 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-              </div>
+              <img src="/icon.png" className="w-6 h-6 rounded-md" alt="懶懶財經速報" />
               <span className="text-slate-400 text-sm">懶懶財經速報 © 2026</span>
             </div>
             <div className="flex items-center gap-6 text-slate-500 text-sm">

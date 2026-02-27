@@ -250,7 +250,7 @@ function injectWelcomeHeader(
   const welcomeHeader = `
     <!-- Welcome Header -->
     <div style="text-align: center; margin-bottom: 32px;">
-      <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
+      <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 16px;" />
       <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
       <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>
@@ -357,7 +357,7 @@ function generateWelcomeEmailWithExample(
   <div style="max-width: 560px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; padding: 40px; border: 1px solid #475569;">
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 32px;">
-      <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
+      <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 16px;" />
       <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
       <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>

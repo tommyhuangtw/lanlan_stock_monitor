@@ -82,7 +82,7 @@ function ThankYouContent() {
               </div>
               <div>
                 <p className="font-medium text-slate-400">第 8 天起</p>
-                <p className="text-sm text-slate-500">免費版改為每週一封（週一發送）</p>
+                <p className="text-sm text-slate-500">免費版改為每週一封（週三發送）</p>
               </div>
             </div>
           </div>

@@ -83,7 +83,8 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   const episodes = report.episodeSummaries || [];
 
   // Header
-  const header = `<div style="background:linear-gradient(135deg,#1e3a5f 0%,#234e78 50%,#2a6298 100%);padding:32px 16px;border-radius:12px 12px 0 0;text-align:center;"><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">📊 懶懶財經速報</h1><p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org';
+  const header = `<div style="background:linear-gradient(135deg,#1e3a5f 0%,#234e78 50%,#2a6298 100%);padding:32px 16px;border-radius:12px 12px 0 0;text-align:center;"><div style="margin-bottom:8px;"><img src="${appUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;" /></div><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">懶懶財經速報</h1><p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
 
   // Bullish signals
   let bullishHtml = '';

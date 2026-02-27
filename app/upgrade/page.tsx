@@ -81,11 +81,7 @@ function UpgradeContent() {
       <div className="border-b border-slate-800">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
+            <img src="/icon.png" className="w-8 h-8 rounded-lg" alt="懶懶財經速報" />
             <span className="font-semibold text-white">懶懶財經速報</span>
           </Link>
           <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">

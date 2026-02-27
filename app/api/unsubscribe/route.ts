@@ -1,25 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import crypto from 'crypto';
+
+// Verify HMAC signature for unsubscribe URL
+function verifyUnsubscribeSignature(userId: string, signature: string): boolean {
+  const secrets = [
+    process.env.UNSUBSCRIBE_SECRET || process.env.RESEND_API_KEY || 'fallback-secret',
+    process.env.UNSUBSCRIBE_SECRET_OLD,  // for secret rotation
+  ].filter(Boolean) as string[];
+
+  for (const secret of secrets) {
+    const expected = crypto.createHmac('sha256', secret).update(userId).digest('hex');
+    if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export async function GET(request: NextRequest) {
+  const uid = request.nextUrl.searchParams.get('uid');
+  const sig = request.nextUrl.searchParams.get('sig');
   const token = request.nextUrl.searchParams.get('token');
 
-  if (!token) {
-    return new NextResponse(unsubscribeHtml('無效的連結', false), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
-  }
-
   try {
-    // Find user by magic link token
-    const { data: magicLink } = await supabaseAdmin
-      .from('magic_links')
-      .select('user_id')
-      .eq('token', token)
-      .single();
+    let userId: string | null = null;
 
-    if (!magicLink) {
-      return new NextResponse(unsubscribeHtml('連結已失效或無效', false), {
+    // New HMAC-based unsubscribe (never expires)
+    if (uid && sig) {
+      if (sig.length !== 64 || !verifyUnsubscribeSignature(uid, sig)) {
+        return new NextResponse(unsubscribeHtml('無效的連結', false), {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
+      userId = uid;
+    }
+    // Legacy: magic link token-based unsubscribe (backward compatible)
+    else if (token) {
+      const { data: magicLink } = await supabaseAdmin
+        .from('magic_links')
+        .select('user_id')
+        .eq('token', token)
+        .single();
+
+      if (!magicLink) {
+        return new NextResponse(unsubscribeHtml('連結已失效或無效', false), {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
+      userId = magicLink.user_id;
+    }
+
+    if (!userId) {
+      return new NextResponse(unsubscribeHtml('無效的連結', false), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     }
@@ -28,7 +61,7 @@ export async function GET(request: NextRequest) {
     await supabaseAdmin
       .from('users')
       .update({ is_unsubscribed: true })
-      .eq('id', magicLink.user_id);
+      .eq('id', userId);
 
     return new NextResponse(unsubscribeHtml('您已成功取消訂閱，將不再收到 Email。', true), {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },

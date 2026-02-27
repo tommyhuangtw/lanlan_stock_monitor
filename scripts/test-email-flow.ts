@@ -141,7 +141,7 @@ function generateTrialEndEmail(): string {
       </div>
       <div style="display: flex;">
         <span style="color: #10B981; margin-right: 8px;">✓</span>
-        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">改為每週一收到一封週報</p>
+        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">改為每週三收到一封週報</p>
       </div>
     </div>
     <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">

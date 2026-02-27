@@ -13,11 +13,14 @@ import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+const BATCH_SIZE = 10;
+
 // Inline createMagicLink to avoid importing lib/auth.ts
 // (which has top-level `import { cookies } from 'next/headers'`)
-async function createMagicLink(userId: string): Promise<string> {
+async function createMagicLink(userId: string, expiresInMs = 15 * 60 * 1000): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+  const expiresAt = new Date(Date.now() + expiresInMs);
 
   await supabaseAdmin
     .from('magic_links')
@@ -31,6 +34,23 @@ async function createMagicLink(userId: string): Promise<string> {
   return `${baseUrl}/auth/verify?token=${token}`;
 }
 
+// Generate HMAC-based unsubscribe URL (never expires)
+function generateUnsubscribeUrl(userId: string): string {
+  const secret = process.env.UNSUBSCRIBE_SECRET || process.env.RESEND_API_KEY || 'fallback-secret';
+  const signature = crypto.createHmac('sha256', secret).update(userId).digest('hex');
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return `${baseUrl}/api/unsubscribe?uid=${userId}&sig=${signature}`;
+}
+
+// Calculate days between two dates using Taipei timezone
+function daysSinceSignupTaipei(createdAt: string): number {
+  const todayStr = formatDateTaipei(new Date());
+  const createdStr = formatDateTaipei(new Date(createdAt));
+  return Math.floor(
+    (new Date(todayStr).getTime() - new Date(createdStr).getTime()) / (1000 * 60 * 60 * 24)
+  );
+}
+
 export interface SendEmailsResult {
   usersProcessed: number;
   emailsSent: number;
@@ -39,6 +59,15 @@ export interface SendEmailsResult {
   skipped: number;
   alreadySent: number;
   errors: string[];
+}
+
+interface ProcessUserResult {
+  sent: boolean;
+  cacheHit: boolean;
+  cacheMiss: boolean;
+  skipped: boolean;
+  alreadySent: boolean;
+  error?: string;
 }
 
 export async function sendEmails(): Promise<SendEmailsResult> {
@@ -54,7 +83,9 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
   const today = new Date();
   const dateStr = formatDateTaipei(today);
-  const isMonday = today.getDay() === 1;
+  // Use Taipei timezone for day-of-week check
+  const todayTaipei = formatDateTaipei(today);
+  const isWednesday = new Date(todayTaipei).getDay() === 3;
   const emailType = 'daily' as const;
 
   // Get all active users (exclude unsubscribed)
@@ -84,213 +115,252 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
   const allSourceIds = activeSources.map(s => s.id);
 
-  for (const user of users) {
-    results.usersProcessed++;
-
-    // Lazy sync: if user has stripe_customer_id but is_paid is false,
-    // check Stripe for active subscription (mirrors /api/auth/me logic)
-    if (user.stripe_customer_id && !user.is_paid && process.env.STRIPE_SECRET_KEY) {
-      try {
-        const Stripe = (await import('stripe')).default;
-        const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
-        const subscriptions = await stripeClient.subscriptions.list({
-          customer: user.stripe_customer_id,
-          status: 'active',
-          limit: 1,
-        });
-        if (subscriptions.data.length > 0) {
-          await supabaseAdmin
-            .from('users')
-            .update({
-              is_paid: true,
-              stripe_subscription_id: subscriptions.data[0].id,
-            })
-            .eq('id', user.id);
-          user.is_paid = true;
-          console.log(`[sendEmails] Lazy-synced is_paid=true for ${user.email}`);
-        }
-      } catch (err) {
-        console.warn(`[sendEmails] Stripe sync failed for ${user.email}:`, err);
-      }
-    }
-
-    // Calculate days since signup
-    const daysSinceSignup = Math.floor(
-      (today.getTime() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24)
+  // Process users in batches for parallel sending
+  for (let i = 0; i < users.length; i += BATCH_SIZE) {
+    const batch = users.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map(user => processUser(user, allSourceIds, today, dateStr, isWednesday, emailType))
     );
 
-    // Determine if should send
-    // paid = daily, free trial (< 7 days) = daily, free after trial = Monday only
-    let shouldSend = false;
-
-    if (user.is_paid) {
-      shouldSend = true;
-    } else if (daysSinceSignup < 7) {
-      shouldSend = true;
-    } else if (isMonday) {
-      shouldSend = true;
-    }
-
-    // Day 7: send trial-end reminder email for free users
-    if (!user.is_paid && daysSinceSignup === 7) {
-      try {
-        // Check if already sent trial_end email
-        const { data: alreadySentTrialEnd } = await supabaseAdmin
-          .from('email_logs')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('email_type', 'trial_end')
-          .limit(1)
-          .single();
-
-        if (!alreadySentTrialEnd) {
-          const trialMagicLink = await createMagicLink(user.id);
-          const trialBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-          const trialToken = new URL(trialMagicLink).searchParams.get('token');
-          const trialUnsubUrl = `${trialBaseUrl}/api/unsubscribe?token=${trialToken}`;
-
-          const { data: trialResult, error: trialError } = await resend.emails.send({
-            from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-            to: user.email,
-            subject: '你的每日摘要體驗已結束',
-            html: generateTrialEndEmail(trialMagicLink, `${trialBaseUrl}/upgrade`, trialUnsubUrl),
-            headers: {
-              'List-Unsubscribe': `<${trialUnsubUrl}>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-            },
-          });
-
-          if (!trialError) {
-            await supabaseAdmin.from('email_logs').insert({
-              user_id: user.id,
-              email_type: 'trial_end',
-              subject: '你的每日摘要體驗已結束',
-              resend_id: trialResult?.id,
-            });
-            results.emailsSent++;
-          }
-        }
-      } catch (e) {
-        results.errors.push(`Trial end email error for ${user.email}: ${e}`);
+    for (const result of batchResults) {
+      results.usersProcessed++;
+      if (result.status === 'fulfilled') {
+        const r = result.value;
+        if (r.sent) results.emailsSent++;
+        if (r.cacheHit) results.cacheHits++;
+        if (r.cacheMiss) results.cacheMisses++;
+        if (r.skipped) results.skipped++;
+        if (r.alreadySent) results.alreadySent++;
+        if (r.error) results.errors.push(r.error);
+      } else {
+        results.errors.push(`Unexpected error: ${result.reason}`);
       }
-    }
-
-    if (!shouldSend) {
-      results.skipped++;
-      continue;
-    }
-
-    try {
-      // Get cached digest
-      const cacheResult = await getCachedDigest(
-        supabaseAdmin,
-        allSourceIds,
-        emailType,
-        today
-      );
-
-      if (!cacheResult.found) {
-        if (cacheResult.reason === 'no_content') {
-          results.skipped++;
-          continue;
-        }
-
-        results.cacheMisses++;
-        results.errors.push(
-          `Cache miss for user ${user.id} (${cacheResult.reason}): ${generateCombinationKey(allSourceIds)}`
-        );
-        continue;
-      }
-
-      results.cacheHits++;
-      const digest = cacheResult.digest!;
-
-      // Check if already sent to this user
-      const alreadySentToUser = await wasEmailSent(
-        supabaseAdmin,
-        digest.id,
-        user.id
-      );
-
-      if (alreadySentToUser) {
-        results.alreadySent++;
-        continue;
-      }
-
-      // Generate user-specific magic link
-      const magicLinkUrl = await createMagicLink(user.id);
-
-      // Generate unsubscribe URL
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const magicLinkToken = new URL(magicLinkUrl).searchParams.get('token');
-      const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${magicLinkToken}`;
-
-      // Inject magic link and unsubscribe URL into cached HTML
-      let emailHtml = injectMagicLinkToHtml(digest.html_template, magicLinkUrl, unsubscribeUrl);
-
-      // Inject trial CTA for free trial users (at the top of email)
-      let emailSubject = `今日懶懶財經速報 - ${dateStr}`;
-      if (!user.is_paid && daysSinceSignup < 7) {
-        const upgradeUrl = `${baseUrl}/upgrade`;
-        const trialCta = generateTrialCta(daysSinceSignup, upgradeUrl);
-        emailHtml = emailHtml.replace('<!-- CTA_INJECTION_POINT -->', trialCta);
-
-        // Add trial countdown to subject
-        const daysLeft = 7 - daysSinceSignup;
-        emailSubject = daysLeft <= 1
-          ? `今日懶懶財經速報 - ${dateStr}（最後一天！）`
-          : `今日懶懶財經速報 - ${dateStr}（免費體驗還剩 ${daysLeft} 天）`;
-      }
-
-      // Send email
-      const { data: emailResult, error: emailError } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-        to: user.email,
-        subject: emailSubject,
-        html: emailHtml,
-        headers: {
-          'List-Unsubscribe': `<${unsubscribeUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      });
-
-      if (emailError) {
-        results.errors.push(`Failed to send email to ${user.email}: ${emailError.message}`);
-        continue;
-      }
-
-      // Record email sent
-      await recordEmailSent(
-        supabaseAdmin,
-        digest.id,
-        user.id,
-        magicLinkUrl,
-        emailResult?.id
-      );
-
-      // Update email_logs for backward compatibility
-      await supabaseAdmin.from('email_logs').insert({
-        user_id: user.id,
-        email_type: emailType,
-        subject: emailSubject,
-        episodes_included: digest.episode_ids,
-        resend_id: emailResult?.id,
-      });
-
-      // Update user's last_email_sent
-      await supabaseAdmin
-        .from('users')
-        .update({ last_email_sent: new Date().toISOString() })
-        .eq('id', user.id);
-
-      results.emailsSent++;
-
-    } catch (emailError) {
-      results.errors.push(`Error sending email to ${user.email}: ${emailError}`);
     }
   }
 
   return results;
+}
+
+async function processUser(
+  user: Record<string, unknown>,
+  allSourceIds: string[],
+  today: Date,
+  dateStr: string,
+  isWednesday: boolean,
+  emailType: 'daily' | 'weekly'
+): Promise<ProcessUserResult> {
+  const result: ProcessUserResult = {
+    sent: false,
+    cacheHit: false,
+    cacheMiss: false,
+    skipped: false,
+    alreadySent: false,
+  };
+
+  // Lazy sync: if user has stripe_customer_id but is_paid is false,
+  // check Stripe for active subscription (mirrors /api/auth/me logic)
+  if (user.stripe_customer_id && !user.is_paid && process.env.STRIPE_SECRET_KEY) {
+    try {
+      const Stripe = (await import('stripe')).default;
+      const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+      const subscriptions = await stripeClient.subscriptions.list({
+        customer: user.stripe_customer_id as string,
+        status: 'active',
+        limit: 1,
+      });
+      if (subscriptions.data.length > 0) {
+        await supabaseAdmin
+          .from('users')
+          .update({
+            is_paid: true,
+            stripe_subscription_id: subscriptions.data[0].id,
+          })
+          .eq('id', user.id);
+        user.is_paid = true;
+        console.log(`[sendEmails] Lazy-synced is_paid=true for ${user.email}`);
+      }
+    } catch (err) {
+      console.warn(`[sendEmails] Stripe sync failed for ${user.email}:`, err);
+    }
+  }
+
+  // Calculate days since signup using Taipei timezone
+  const daysSinceSignup = daysSinceSignupTaipei(user.created_at as string);
+
+  // Day 7: send trial-end reminder email for free users, skip regular digest
+  if (!user.is_paid && daysSinceSignup === 7) {
+    try {
+      // Check if already sent trial_end email
+      const { data: alreadySentTrialEnd } = await supabaseAdmin
+        .from('email_logs')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('email_type', 'trial_end')
+        .limit(1)
+        .single();
+
+      if (!alreadySentTrialEnd) {
+        const trialMagicLink = await createMagicLink(user.id as string, THREE_DAYS_MS);
+        const trialBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const trialUnsubUrl = generateUnsubscribeUrl(user.id as string);
+
+        const { data: trialResult, error: trialError } = await resend.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+          to: user.email as string,
+          subject: '你的每日摘要體驗已結束',
+          html: generateTrialEndEmail(trialMagicLink, `${trialBaseUrl}/upgrade`, trialUnsubUrl),
+          headers: {
+            'List-Unsubscribe': `<${trialUnsubUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+        });
+
+        if (!trialError) {
+          await supabaseAdmin.from('email_logs').insert({
+            user_id: user.id,
+            email_type: 'trial_end',
+            subject: '你的每日摘要體驗已結束',
+            resend_id: trialResult?.id,
+          });
+          result.sent = true;
+        }
+      }
+    } catch (e) {
+      result.error = `Trial end email error for ${user.email}: ${e}`;
+    }
+    // Skip regular digest on day 7 (avoid overlap with Wednesday email)
+    result.skipped = true;
+    return result;
+  }
+
+  // Determine if should send
+  // paid = daily, free trial (< 7 days) = daily, free after trial = Wednesday only
+  let shouldSend = false;
+
+  if (user.is_paid) {
+    shouldSend = true;
+  } else if (daysSinceSignup < 7) {
+    shouldSend = true;
+  } else if (isWednesday) {
+    shouldSend = true;
+  }
+
+  if (!shouldSend) {
+    result.skipped = true;
+    return result;
+  }
+
+  try {
+    // Get cached digest
+    const cacheResult = await getCachedDigest(
+      supabaseAdmin,
+      allSourceIds,
+      emailType,
+      today
+    );
+
+    if (!cacheResult.found) {
+      if (cacheResult.reason === 'no_content') {
+        result.skipped = true;
+        return result;
+      }
+
+      result.cacheMiss = true;
+      result.error = `Cache miss for user ${user.id} (${cacheResult.reason}): ${generateCombinationKey(allSourceIds)}`;
+      return result;
+    }
+
+    result.cacheHit = true;
+    const digest = cacheResult.digest!;
+
+    // Check if already sent to this user
+    const alreadySentToUser = await wasEmailSent(
+      supabaseAdmin,
+      digest.id,
+      user.id as string
+    );
+
+    if (alreadySentToUser) {
+      result.alreadySent = true;
+      return result;
+    }
+
+    // Generate user-specific magic link (7-day expiry for email links)
+    const magicLinkUrl = await createMagicLink(user.id as string, THREE_DAYS_MS);
+
+    // Generate HMAC-based unsubscribe URL (never expires)
+    const unsubscribeUrl = generateUnsubscribeUrl(user.id as string);
+
+    // Inject magic link and unsubscribe URL into cached HTML
+    let emailHtml = injectMagicLinkToHtml(digest.html_template, magicLinkUrl, unsubscribeUrl);
+
+    // Inject trial CTA for free trial users (at the top of email)
+    let emailSubject = `今日懶懶財經速報 - ${dateStr}`;
+    if (!user.is_paid && daysSinceSignup < 7) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const upgradeUrl = `${baseUrl}/upgrade`;
+      const trialCta = generateTrialCta(daysSinceSignup, upgradeUrl);
+      emailHtml = emailHtml.replace('<!-- CTA_INJECTION_POINT -->', trialCta);
+
+      // Add trial countdown to subject with urgency escalation
+      const daysLeft = 7 - daysSinceSignup;
+      if (daysLeft <= 1) {
+        emailSubject = `⚠ 今日懶懶財經速報 - ${dateStr}（限時優惠最後一天！）`;
+      } else if (daysLeft <= 3) {
+        emailSubject = `⏰ 今日懶懶財經速報 - ${dateStr}（限時優惠倒數 ${daysLeft} 天）`;
+      } else {
+        emailSubject = `今日懶懶財經速報 - ${dateStr}（還剩 ${daysLeft} 天）`;
+      }
+    }
+
+    // Send email
+    const { data: emailResult, error: emailError } = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+      to: user.email as string,
+      subject: emailSubject,
+      html: emailHtml,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    });
+
+    if (emailError) {
+      result.error = `Failed to send email to ${user.email}: ${emailError.message}`;
+      return result;
+    }
+
+    // Record email sent
+    await recordEmailSent(
+      supabaseAdmin,
+      digest.id,
+      user.id as string,
+      magicLinkUrl,
+      emailResult?.id
+    );
+
+    // Update email_logs for backward compatibility
+    await supabaseAdmin.from('email_logs').insert({
+      user_id: user.id,
+      email_type: emailType,
+      subject: emailSubject,
+      episodes_included: digest.episode_ids,
+      resend_id: emailResult?.id,
+    });
+
+    // Update user's last_email_sent
+    await supabaseAdmin
+      .from('users')
+      .update({ last_email_sent: new Date().toISOString() })
+      .eq('id', user.id);
+
+    result.sent = true;
+
+  } catch (emailError) {
+    result.error = `Error sending email to ${user.email}: ${emailError}`;
+  }
+
+  return result;
 }
 
 function generateTrialCta(daysSinceSignup: number, upgradeUrl: string): string {
@@ -299,24 +369,47 @@ function generateTrialCta(daysSinceSignup: number, upgradeUrl: string): string {
 
   let headline: string;
   let footnote = '';
+  let bgGradient: string;
+  let borderColor: string;
+  let headlineColor: string;
+  let btnBg: string;
+  let btnTextColor: string;
 
   if (daysLeft <= 1) {
-    headline = '最後一天！優惠價即將結束';
+    // Red — last day (matches frontend red-500 urgency)
+    headline = '⚠ 最後一天！優惠價即將結束';
     footnote = '<p style="color: #6B7280; font-size: 11px; margin: 10px 0 0 0;">明天起升級價格恢復為 ' + NT + '$199/月</p>';
+    bgGradient = 'rgba(239, 68, 68, 0.12), rgba(220, 38, 38, 0.06)';
+    borderColor = 'rgba(239, 68, 68, 0.4)';
+    headlineColor = '#EF4444';
+    btnBg = '#EF4444';
+    btnTextColor = '#FFFFFF';
   } else if (daysLeft <= 3) {
-    headline = '限時優惠還剩 ' + daysLeft + ' 天';
+    // Orange + urgency copy
+    headline = '⏰ 優惠即將結束，還剩 ' + daysLeft + ' 天';
+    bgGradient = 'rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.06)';
+    borderColor = 'rgba(245, 158, 11, 0.3)';
+    headlineColor = '#D97706';
+    btnBg = '#F59E0B';
+    btnTextColor = '#0F172A';
   } else {
+    // Orange — normal
     headline = '限時優惠還剩 ' + daysLeft + ' 天';
+    bgGradient = 'rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.06)';
+    borderColor = 'rgba(245, 158, 11, 0.3)';
+    headlineColor = '#D97706';
+    btnBg = '#F59E0B';
+    btnTextColor = '#0F172A';
   }
 
   return '<div style="padding: 16px 20px;">'
-    + '<div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.06)); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 20px; text-align: center;">'
-    + '<p style="color: #D97706; font-size: 15px; font-weight: 600; margin: 0 0 8px 0;">' + headline + '</p>'
+    + '<div style="background: linear-gradient(135deg, ' + bgGradient + '); border: 1px solid ' + borderColor + '; border-radius: 12px; padding: 20px; text-align: center;">'
+    + '<p style="color: ' + headlineColor + '; font-size: 15px; font-weight: 600; margin: 0 0 8px 0;">' + headline + '</p>'
     + '<p style="color: #1E293B; font-size: 20px; font-weight: 700; margin: 0 0 4px 0;">'
     + '<span style="text-decoration: line-through; color: #9CA3AF; font-size: 14px; font-weight: 400; margin-right: 8px;">' + NT + '$199/月</span>'
     + NT + '$99/月</p>'
     + '<p style="color: #64748B; font-size: 13px; margin: 0 0 14px 0;">升級專業版，繼續每天收到最新摘要</p>'
-    + '<a href="' + upgradeUrl + '" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px;">'
+    + '<a href="' + upgradeUrl + '" style="display: inline-block; background-color: ' + btnBg + '; color: ' + btnTextColor + '; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px;">'
     + NT + '$99/月 升級專業版 →</a>'
     + footnote
     + '</div></div>';
@@ -345,7 +438,7 @@ function generateTrialEndEmail(magicLinkUrl: string, upgradeUrl: string, unsubsc
       </div>
       <div style="display: flex;">
         <span style="color: #10B981; margin-right: 8px;">✓</span>
-        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">改為每週一收到一封週報</p>
+        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">改為每週三收到一封週報</p>
       </div>
     </div>
 

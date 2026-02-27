@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -81,6 +84,73 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Email Preview Section */}
+      <div className="max-w-5xl mx-auto px-4 py-20">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-white mb-4">註冊後，你會收到這樣的電子報</h2>
+          <p className="text-slate-400">每天早上自動送到你的信箱，打開就能掌握市場動態</p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-10 items-center">
+          {/* Left: Key benefits */}
+          <div className="space-y-6">
+            <div className="bg-slate-800/40 rounded-2xl p-6 border border-slate-700/50">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg mb-1">註冊立即收到</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">一註冊就會收到當天最新的投資摘要電子報，不用等到隔天</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-2xl p-6 border border-slate-700/50">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg mb-1">7 天免費體驗</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">連續 7 天每天收到完整電子報，體驗結束後改為每週三一封</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/40 rounded-2xl p-6 border border-slate-700/50">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg mb-1">無需信用卡</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">填入 Email 即可開始，不需要綁定任何付款資訊</p>
+                </div>
+              </div>
+            </div>
+
+            <Link href="/signup">
+              <Button size="lg" className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold text-lg py-6 cursor-pointer transition-all hover:scale-[1.02] mt-2">
+                開始免費試用
+                <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </Button>
+            </Link>
+          </div>
+
+          {/* Right: Email mockup with two pages */}
+          <EmailMockup />
+        </div>
+      </div>
+
       {/* Features */}
       <div className="max-w-5xl mx-auto px-4 py-20">
         <div className="text-center mb-16">
@@ -151,7 +221,7 @@ export default function HomePage() {
                 <svg className="w-5 h-5 text-emerald-400/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-slate-400">之後每週一收到</span>
+                <span className="text-slate-400">之後每週三收到</span>
               </li>
             </ul>
             <Link href="/signup" className="block">
@@ -231,6 +301,197 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function EmailMockup() {
+  const [page, setPage] = useState(0);
+  const PAGE_COUNT = 2;
+  const AUTO_ROTATE_MS = 5000;
+
+  const [pauseUntil, setPauseUntil] = useState(0);
+
+  const goToPage = useCallback((i: number) => {
+    setPage(i);
+    setPauseUntil(Date.now() + AUTO_ROTATE_MS * 2);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (Date.now() >= pauseUntil) {
+        setPage((p) => (p + 1) % PAGE_COUNT);
+      }
+    }, AUTO_ROTATE_MS);
+    return () => clearInterval(timer);
+  }, [pauseUntil]);
+
+  return (
+    <div className="relative">
+      <div className="bg-white rounded-xl shadow-2xl shadow-black/30 overflow-hidden transform md:rotate-1 md:hover:rotate-0 transition-transform duration-300">
+        {/* Email header */}
+        <div className="bg-gradient-to-r from-[#1e3a5f] via-[#234e78] to-[#2a6298] px-6 py-5 text-center">
+          <p className="text-white font-bold text-lg">📊 懶懶財經速報</p>
+          <p className="text-blue-200 text-xs mt-1">2026-02-27 ｜ 分析 5 個來源</p>
+        </div>
+
+        {/* Page content - horizontal slider */}
+        <div className="overflow-hidden min-h-[420px]">
+          <div
+            className="flex transition-transform duration-500 ease-in-out"
+            style={{ width: `${PAGE_COUNT * 100}%`, transform: `translateX(-${page * (100 / PAGE_COUNT)}%)` }}
+          >
+            {/* Page 1 */}
+            <div className="px-5 py-4 space-y-4" style={{ width: `${100 / PAGE_COUNT}%` }}>
+              {/* Market overview */}
+              <div className="border border-slate-200 rounded-lg p-4">
+                <p className="font-bold text-slate-800 text-sm mb-3">📊 今日總覽</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold text-emerald-600">看漲 4</span>
+                  <div className="flex-1 h-2.5 rounded-full overflow-hidden flex">
+                    <div className="bg-emerald-500 w-[57%]" />
+                    <div className="bg-red-500 w-[43%]" />
+                  </div>
+                  <span className="text-xs font-semibold text-red-500">看空 3</span>
+                </div>
+                <p className="text-center text-slate-500 text-xs italic">&ldquo;多空看法分歧，建議審慎評估&rdquo;</p>
+              </div>
+
+              {/* Quick digest */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">⚡ 快速重點</p>
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-500 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600 leading-relaxed">輝達財報引發市場錯殺，AI 基礎建設與電力需求仍是長線佈局的絕佳良機。</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-500 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600 leading-relaxed">拒絕短期投機誘惑，專注投資自己與長期價值投資以發揮時間複利的最大效益。</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bullish signals */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">📈 看漲訊號</p>
+                <div className="border-l-4 border-emerald-500 bg-emerald-50/50 rounded-r-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-emerald-700 font-bold text-sm">TSMC</span>
+                    <span className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0.5 rounded-full font-medium">🤝 共識</span>
+                    <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-medium">長線</span>
+                  </div>
+                  <p className="text-xs text-slate-500">AI 資本支出持續擴大，台積電受惠明確</p>
+                </div>
+                <div className="border-l-4 border-emerald-500 bg-emerald-50/50 rounded-r-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-emerald-700 font-bold text-sm">NVDA</span>
+                    <span className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0.5 rounded-full font-medium">🤝 共識</span>
+                    <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-medium">中線</span>
+                  </div>
+                  <p className="text-xs text-slate-500">資料中心需求強勁，GPU 算力仍供不應求</p>
+                </div>
+              </div>
+
+              {/* Fade out */}
+              <div className="relative h-12 mt-2">
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white" />
+                <div className="absolute bottom-0 left-0 right-0 text-center">
+                  <p className="text-slate-400 text-xs">還有更多訊號與深度分析⋯⋯</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Page 2 */}
+            <div className="px-5 py-4 space-y-4" style={{ width: `${100 / PAGE_COUNT}%` }}>
+              {/* Bearish signals */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">📉 看空訊號</p>
+                <div className="border-l-4 border-red-500 bg-red-50/50 rounded-r-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-red-700 font-bold text-sm">某檔個股</span>
+                    <span className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5 rounded-full font-medium">⚡ 分歧</span>
+                    <span className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0.5 rounded-full font-medium">短線</span>
+                  </div>
+                  <p className="text-xs text-slate-500">短線漲幅過大，部分觀點認為有回檔風險</p>
+                </div>
+              </div>
+
+              {/* Risk alerts */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">⚠️ 風險提醒</p>
+                <div className="border-l-4 border-red-400 bg-red-50/30 rounded-r-lg p-3 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-400 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600">美國科技股估值偏高，留意財報不如預期的修正風險</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-400 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600">台幣匯率波動加劇，出口類股需留意匯損影響</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Catalysts */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">📅 近期催化劑</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-bold whitespace-nowrap">03/15</span>
+                    <p className="text-xs text-slate-600">FOMC 利率決策會議</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-bold whitespace-nowrap">03/20</span>
+                    <p className="text-xs text-slate-600">台積電法說會</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-bold whitespace-nowrap">04/02</span>
+                    <p className="text-xs text-slate-600">美國非農就業數據公布</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Global market brief */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-800 text-sm">🌐 全球市場快訊</p>
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-500 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600 leading-relaxed">美股三大指數收紅，費半漲幅領先大盤</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-500 mt-0.5 text-xs">●</span>
+                    <p className="text-xs text-slate-600 leading-relaxed">日本央行維持利率不變，日圓走弱推升出口股</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fade out */}
+              <div className="relative h-12 mt-2">
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white" />
+                <div className="absolute bottom-0 left-0 right-0 text-center">
+                  <p className="text-slate-400 text-xs">還有獨特觀點、節目摘要⋯⋯</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dot indicators */}
+      <div className="flex justify-center gap-2 mt-4">
+        {Array.from({ length: PAGE_COUNT }, (_, i) => (
+          <button
+            key={i}
+            onClick={() => goToPage(i)}
+            className={`w-2.5 h-2.5 rounded-full transition-colors cursor-pointer ${page === i ? 'bg-amber-400' : 'bg-slate-600 hover:bg-slate-500'}`}
+            aria-label={`Page ${i + 1}`}
+          />
+        ))}
+      </div>
+
+      {/* Decorative glow */}
+      <div className="absolute -inset-4 bg-amber-500/5 rounded-3xl -z-10 blur-2xl" />
     </div>
   );
 }

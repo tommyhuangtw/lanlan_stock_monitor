@@ -45,8 +45,13 @@ export async function POST() {
     };
 
     // Apply promotional coupon only during first 7 days (trial period)
+    // Use Taipei timezone to match send-emails.ts logic
+    const toTaipeiDateStr = (d: Date) =>
+      d.toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
+    const todayStr = toTaipeiDateStr(new Date());
+    const createdStr = toTaipeiDateStr(new Date(user.created_at));
     const daysSinceSignup = Math.floor(
-      (Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24)
+      (new Date(todayStr).getTime() - new Date(createdStr).getTime()) / (1000 * 60 * 60 * 24)
     );
 
     if (process.env.STRIPE_PROMO_COUPON_ID && daysSinceSignup < 7) {

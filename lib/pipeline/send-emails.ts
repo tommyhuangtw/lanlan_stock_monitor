@@ -86,7 +86,6 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   // Use Taipei timezone for day-of-week check
   const todayTaipei = formatDateTaipei(today);
   const isWednesday = new Date(todayTaipei).getDay() === 3;
-  const emailType = 'daily' as const;
 
   // Get all active users (exclude unsubscribed)
   const { data: users, error: usersError } = await supabaseAdmin
@@ -119,7 +118,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
-      batch.map(user => processUser(user, allSourceIds, today, dateStr, isWednesday, emailType))
+      batch.map(user => processUser(user, allSourceIds, today, dateStr, isWednesday))
     );
 
     for (const result of batchResults) {
@@ -147,7 +146,6 @@ async function processUser(
   today: Date,
   dateStr: string,
   isWednesday: boolean,
-  emailType: 'daily' | 'weekly'
 ): Promise<ProcessUserResult> {
   const result: ProcessUserResult = {
     sent: false,
@@ -249,6 +247,10 @@ async function processUser(
     result.skipped = true;
     return result;
   }
+
+  // Determine email type based on user state
+  const emailType: 'daily' | 'weekly' =
+    (user.is_paid || daysSinceSignup < 7) ? 'daily' : 'weekly';
 
   try {
     // Get cached digest
@@ -424,7 +426,7 @@ function generateTrialEndEmail(magicLinkUrl: string, upgradeUrl: string, unsubsc
   <div style="max-width: 560px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; padding: 40px; border: 1px solid #475569;">
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 32px;">
-      <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
+      <img src="${process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org'}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;margin-bottom:16px;" />
       <h1 style="color: #FFFFFF; font-size: 22px; margin: 0 0 8px 0;">你的每日摘要體驗已結束</h1>
       <p style="color: #CBD5E1; font-size: 14px; margin: 0;">過去 7 天，你每天都收到了最新的投資摘要</p>
     </div>

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
           <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0F172A; padding: 40px 20px;">
             <div style="max-width: 480px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; padding: 40px; border: 1px solid #334155;">
               <div style="text-align: center; margin-bottom: 32px;">
-                <div style="display: inline-block; width: 48px; height: 48px; background: linear-gradient(135deg, #FBBF24, #D97706); border-radius: 12px; margin-bottom: 16px;"></div>
+                <img src="${process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org'}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;margin-bottom:16px;" />
                 <h1 style="color: #FFFFFF; font-size: 24px; margin: 0;">登入懶懶財經速報</h1>
               </div>
 

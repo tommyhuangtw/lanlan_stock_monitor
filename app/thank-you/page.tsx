@@ -68,7 +68,7 @@ function ThankYouContent() {
               </div>
               <div>
                 <p className="font-medium text-white">前 7 天</p>
-                <p className="text-sm text-slate-400">每天收到最新 Podcast 及 YouTube 精華摘要</p>
+                <p className="text-sm text-slate-400">每天收到最新 Youtube 和 Podcast 投資訊號摘要</p>
               </div>
             </div>
 

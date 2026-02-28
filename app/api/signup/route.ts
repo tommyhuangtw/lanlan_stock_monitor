@@ -247,65 +247,66 @@ function injectWelcomeHeader(
 ): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  const welcomeHeader = `
-    <!-- Welcome Header -->
-    <div style="text-align: center; margin-bottom: 32px;">
-      <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 16px;" />
-      <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
-      <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
-    </div>
+  const welcomeBlock = `
+    <div style="max-width:600px; width:100%; margin:0 auto 16px; background-color:#334155; border-radius:12px; padding:32px; box-shadow:0 4px 20px rgba(0,0,0,0.08); text-align:left;">
+      <!-- Header -->
+      <div style="text-align: center; margin-bottom: 28px;">
+        <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 14px;" />
+        <h1 style="color: #FFFFFF; font-size: 24px; font-weight: 700; margin: 0 0 8px 0;">歡迎加入懶懶財經速報！</h1>
+        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
+      </div>
 
-    <!-- Timeline -->
-    <div style="margin-bottom: 24px;">
-      <p style="color: #FFFFFF; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">接下來會發生什麼？</p>
-      <div style="border-left: 2px solid #475569; padding-left: 20px; margin-left: 8px;">
-        <div style="margin-bottom: 16px;">
-          <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0;">現在</p>
-          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！以下是最新一期的投資摘要</p>
-        </div>
-        <div style="margin-bottom: 16px;">
-          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
-          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
-        </div>
-        <div>
-          <p style="color: #94A3B8; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
-          <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封・<a href="${baseUrl}/upgrade" style="color: #F59E0B; text-decoration: none;">升級專業版</a>可繼續每天收到</p>
+      <!-- Timeline -->
+      <div style="margin-bottom: 24px;">
+        <p style="color: #FFFFFF; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">接下來會發生什麼？</p>
+        <div style="border-left: 2px solid #64748B; padding-left: 20px; margin-left: 8px;">
+          <div style="margin-bottom: 16px;">
+            <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0;">現在</p>
+            <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！以下是最新一期的投資摘要</p>
+          </div>
+          <div style="margin-bottom: 16px;">
+            <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
+            <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
+          </div>
+          <div>
+            <p style="color: #CBD5E1; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
+            <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封・<a href="${baseUrl}/upgrade" style="color: #F59E0B; text-decoration: none;">升級專業版</a>可繼續每天收到</p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Sources -->
-    <div style="background-color: #0F172A; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-      <p style="color: #CBD5E1; font-size: 14px; margin: 0 0 8px 0;">我們幫你追蹤的來源：</p>
-      <p style="color: #F59E0B; font-size: 16px; font-weight: 600; margin: 0;">${sourceNames}</p>
-    </div>
-
-    <!-- Divider -->
-    <div style="display: flex; align-items: center; margin-bottom: 24px;">
-      <div style="flex: 1; height: 1px; background-color: #475569;"></div>
-      <span style="color: #94A3B8; font-size: 12px; padding: 0 12px; text-transform: uppercase; letter-spacing: 1px;">最新摘要</span>
-      <div style="flex: 1; height: 1px; background-color: #475569;"></div>
+      <!-- Upgrade CTA -->
+      <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center;">
+        <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 10px 0;">&#127873; 新用戶限時優惠</p>
+        <p style="color: #FFFFFF; font-size: 22px; font-weight: 700; margin: 0 0 4px 0;"><span style="text-decoration: line-through; color: #94A3B8; font-size: 14px; font-weight: 400; margin-right: 8px;">NT$199/月</span>NT$99/月</p>
+        <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 18px 0;">前兩個月享半價，升級後每天收到最新摘要</p>
+        <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 700; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>
+        <p style="color: #94A3B8; font-size: 11px; margin: 10px 0 0 0;">7 天內升級才享有此優惠</p>
+      </div>
     </div>
   `;
 
-  // Inject welcome header after the opening of the main content div
-  // The digest HTML has a structure: <body><div (outer)><div (inner content)>...
-  // We inject after the first major container opening
-  const injectionPoint = digestHtml.indexOf('<!-- Header -->');
-  if (injectionPoint !== -1) {
-    // Insert welcome header before the digest's own header
-    return digestHtml.slice(0, injectionPoint) + welcomeHeader + digestHtml.slice(injectionPoint);
+  // Insert welcome block BEFORE the main-card div (as a separate card)
+  const mainCardMatch = digestHtml.match(/<div class="main-card"/);
+  if (mainCardMatch && mainCardMatch.index !== undefined) {
+    return digestHtml.slice(0, mainCardMatch.index) + welcomeBlock + digestHtml.slice(mainCardMatch.index);
   }
 
-  // Fallback: try to inject after the main container div
-  const bodyMatch = digestHtml.match(/<body[^>]*>[\s\S]*?<div[^>]*>[\s\S]*?<div[^>]*>/);
-  if (bodyMatch) {
-    const insertPos = bodyMatch.index! + bodyMatch[0].length;
-    return digestHtml.slice(0, insertPos) + welcomeHeader + digestHtml.slice(insertPos);
+  // Fallback: insert before the first major content div after <center>
+  const centerMatch = digestHtml.match(/<center>\s*/);
+  if (centerMatch && centerMatch.index !== undefined) {
+    const insertPos = centerMatch.index + centerMatch[0].length;
+    return digestHtml.slice(0, insertPos) + welcomeBlock + digestHtml.slice(insertPos);
   }
 
-  // Last resort: prepend
-  return welcomeHeader + digestHtml;
+  // Last resort: prepend before body content
+  const bodyMatch = digestHtml.match(/<body[^>]*>/);
+  if (bodyMatch && bodyMatch.index !== undefined) {
+    const insertPos = bodyMatch.index + bodyMatch[0].length;
+    return digestHtml.slice(0, insertPos) + '<center>' + welcomeBlock + '</center>' + digestHtml.slice(insertPos);
+  }
+
+  return welcomeBlock + digestHtml;
 }
 
 function generateWelcomeEmailWithExample(
@@ -352,61 +353,52 @@ function generateWelcomeEmailWithExample(
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0F172A; padding: 40px 20px; margin: 0;">
-  <div style="max-width: 560px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; padding: 40px; border: 1px solid #475569;">
+  <div style="max-width: 560px; margin: 0 auto; background-color: #334155; border-radius: 16px; padding: 32px; border: 1px solid #475569;">
     <!-- Header -->
-    <div style="text-align: center; margin-bottom: 32px;">
-      <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 16px;" />
-      <h1 style="color: #FFFFFF; font-size: 24px; margin: 0 0 8px 0;">歡迎加入 懶懶財經速報！</h1>
+    <div style="text-align: center; margin-bottom: 28px;">
+      <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 14px;" />
+      <h1 style="color: #FFFFFF; font-size: 24px; font-weight: 700; margin: 0 0 8px 0;">歡迎加入懶懶財經速報！</h1>
       <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>
 
     <!-- Timeline -->
     <div style="margin-bottom: 24px;">
       <p style="color: #FFFFFF; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">接下來會發生什麼？</p>
-      <div style="border-left: 2px solid #475569; padding-left: 20px; margin-left: 8px;">
+      <div style="border-left: 2px solid #64748B; padding-left: 20px; margin-left: 8px;">
         <div style="margin-bottom: 16px;">
           <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0;">現在</p>
-          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！</p>
+          <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！</p>
         </div>
         <div style="margin-bottom: 16px;">
           <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
-          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
+          <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
         </div>
         <div>
-          <p style="color: #94A3B8; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
-          <p style="color: #94A3B8; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封</p>
+          <p style="color: #CBD5E1; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
+          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封・<a href="${baseUrl}/upgrade" style="color: #F59E0B; text-decoration: none;">升級專業版</a>可繼續每天收到</p>
         </div>
       </div>
     </div>
 
-    <!-- Sources -->
-    <div style="background-color: #0F172A; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-      <p style="color: #CBD5E1; font-size: 14px; margin: 0 0 8px 0;">我們幫你追蹤的來源：</p>
-      <p style="color: #F59E0B; font-size: 16px; font-weight: 600; margin: 0;">${sourceNames}</p>
+    <!-- Upgrade CTA -->
+    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 10px 0;">&#127873; 新用戶限時優惠</p>
+      <p style="color: #FFFFFF; font-size: 22px; font-weight: 700; margin: 0 0 4px 0;"><span style="text-decoration: line-through; color: #94A3B8; font-size: 14px; font-weight: 400; margin-right: 8px;">NT$199/月</span>NT$99/月</p>
+      <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 18px 0;">前兩個月享半價，升級後每天收到最新摘要</p>
+      <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 700; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>
+      <p style="color: #94A3B8; font-size: 11px; margin: 10px 0 0 0;">7 天內升級才享有此優惠</p>
     </div>
 
     <!-- Example Section -->
     <div style="margin-bottom: 24px;">
-      <div style="display: flex; align-items: center; margin-bottom: 16px;">
-        <div style="flex: 1; height: 1px; background-color: #475569;"></div>
-        <span style="color: #94A3B8; font-size: 12px; padding: 0 12px; text-transform: uppercase; letter-spacing: 1px;">摘要範例</span>
-        <div style="flex: 1; height: 1px; background-color: #475569;"></div>
-      </div>
+      <hr style="border: none; border-top: 1px solid #475569; margin: 0 0 16px 0;">
       <p style="color: #CBD5E1; font-size: 14px; margin: 0 0 16px 0; text-align: center;">
         以下是你每天會收到的摘要格式範例：
       </p>
       ${exampleContentHtml}
-    </div>
-
-    <!-- Upgrade -->
-    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">限時優惠：7 天內升級享特價</p>
-      <p style="color: #FFFFFF; font-size: 20px; font-weight: 700; margin: 0 0 4px 0;">前兩個月只要 NT$99/月</p>
-      <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 16px 0;">原價 NT$199/月・升級後每天收到最新摘要</p>
-      <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 600; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>
-      <p style="color: #94A3B8; font-size: 11px; margin: 10px 0 0 0;">錯過優惠後，升級價格為 NT$199/月</p>
     </div>
 
     <!-- Footer -->

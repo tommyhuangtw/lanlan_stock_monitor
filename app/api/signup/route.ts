@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase().trim(),
       },
     });
+    await getPostHogServer()?.flush();
 
     return NextResponse.json({
       success: true,

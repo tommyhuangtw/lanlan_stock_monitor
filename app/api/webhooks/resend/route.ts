@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  await getPostHogServer()?.flush();
   return NextResponse.json({ received: true });
 }
 

@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
       event: 'user_unsubscribed',
       properties: { method: 'email_link' },
     });
+    await getPostHogServer()?.flush();
 
     return new NextResponse(unsubscribeHtml('您已成功取消訂閱，將不再收到 Email。', true), {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -91,7 +92,7 @@ function unsubscribeHtml(message: string, success: boolean): string {
   <div style="text-align:center;padding:40px;max-width:400px;">
     <div style="width:64px;height:64px;border-radius:50%;background:${color}20;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px;color:${color};">${icon}</div>
     <h1 style="color:#fff;font-size:20px;margin:0 0 12px;">${message}</h1>
-    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">如需重新訂閱，請登入控制台。</p>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">如需重新訂閱，請回首頁重新註冊。</p>
     <a href="/" style="color:#f59e0b;text-decoration:none;font-size:14px;">返回首頁</a>
   </div>
 </body>

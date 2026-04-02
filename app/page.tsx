@@ -44,13 +44,13 @@ function SignupForm({ id }: { id?: string }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="flex-1 w-full sm:w-auto h-14 px-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none"
+          className="flex-1 w-full sm:w-auto h-16 sm:h-14 px-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none"
         />
         <Button
           type="submit"
           size="lg"
           disabled={loading}
-          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-14 px-8 cursor-pointer transition-all hover:scale-105 whitespace-nowrap"
+          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-12 sm:h-14 px-8 cursor-pointer transition-all hover:scale-105 whitespace-nowrap"
         >
           {loading ? (
             <span className="flex items-center gap-2">

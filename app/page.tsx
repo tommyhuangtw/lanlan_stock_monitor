@@ -37,20 +37,20 @@ function SignupForm({ id }: { id?: string }) {
 
   return (
     <form id={id} onSubmit={handleSubmit} className="max-w-lg mx-auto">
-      <div className="flex flex-col sm:flex-row items-center gap-3">
+      <div className="flex flex-row items-center gap-2 sm:gap-3">
         <input
           type="email"
           placeholder="輸入你的 Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="flex-1 w-full sm:w-auto h-16 sm:h-14 px-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none"
+          className="flex-1 min-w-0 h-12 sm:h-14 px-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none text-sm sm:text-base"
         />
         <Button
           type="submit"
           size="lg"
           disabled={loading}
-          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-12 sm:h-14 px-8 cursor-pointer transition-all hover:scale-105 whitespace-nowrap"
+          className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-12 sm:h-14 px-5 sm:px-8 cursor-pointer transition-all hover:scale-105 whitespace-nowrap flex-shrink-0"
         >
           {loading ? (
             <span className="flex items-center gap-2">

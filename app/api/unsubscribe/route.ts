@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getPostHogServer } from '@/lib/posthog-server';
 import crypto from 'crypto';
 
 // Verify HMAC signature for unsubscribe URL
@@ -62,6 +63,12 @@ export async function GET(request: NextRequest) {
       .from('users')
       .update({ is_unsubscribed: true })
       .eq('id', userId);
+
+    getPostHogServer()?.capture({
+      distinctId: userId,
+      event: 'user_unsubscribed',
+      properties: { method: 'email_link' },
+    });
 
     return new NextResponse(unsubscribeHtml('您已成功取消訂閱，將不再收到 Email。', true), {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },

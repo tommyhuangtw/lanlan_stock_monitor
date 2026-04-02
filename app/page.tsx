@@ -1,8 +1,83 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+
+function SignupForm({ id }: { id?: string }) {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [agreed, setAgreed] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email) { setError('請輸入 Email'); return; }
+    if (!agreed) { setError('請先同意接收電子報及行銷資訊'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, marketingConsent: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '註冊失敗');
+      sessionStorage.setItem('signup_email', email);
+      router.push('/thank-you');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '發生錯誤，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form id={id} onSubmit={handleSubmit} className="max-w-lg mx-auto">
+      <div className="flex flex-col sm:flex-row items-center gap-3">
+        <input
+          type="email"
+          placeholder="輸入你的 Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          className="flex-1 w-full sm:w-auto h-12 px-4 rounded-xl bg-slate-800/50 border border-slate-700 text-white placeholder:text-slate-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none"
+        />
+        <Button
+          type="submit"
+          size="lg"
+          disabled={loading}
+          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold h-12 px-8 cursor-pointer transition-all hover:scale-105 whitespace-nowrap"
+        >
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              處理中...
+            </span>
+          ) : '免費訂閱'}
+        </Button>
+      </div>
+      <label className="flex items-start gap-2 mt-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/20 cursor-pointer"
+        />
+        <span className="text-xs text-slate-400">
+          我同意接收懶懶財經速報的電子報及行銷資訊，並同意<a href="/terms" target="_blank" className="text-amber-400 hover:underline">服務條款</a>
+        </span>
+      </label>
+      {error && <p className="mt-2 text-red-400 text-sm text-center sm:text-left">{error}</p>}
+    </form>
+  );
+}
 
 export default function HomePage() {
   return (
@@ -14,48 +89,31 @@ export default function HomePage() {
             <img src="/icon.png" className="w-8 h-8 rounded-lg" alt="懶懶財經速報" />
             <span className="font-semibold text-white">懶懶財經速報</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-slate-300 hover:text-white transition-colors cursor-pointer">
-              登入
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer">
-                免費試用
-              </Button>
-            </Link>
-          </div>
+          <a href="#signup">
+            <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer">
+              免費訂閱
+            </Button>
+          </a>
         </div>
       </nav>
 
       {/* Hero Section */}
       <div className="max-w-5xl mx-auto px-4 pt-32 pb-20 text-center">
         <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-          投資節目太多聽不完？
+          台股、美股投資節目
           <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-200">
-            讓 AI 幫你摘要重點
+            每天 AI 幫你整理重點
           </span>
         </h1>
 
         <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-          自動追蹤熱門台股、美股投資 Podcast 及 YouTube 節目，
+          涵蓋多個熱門投資 Podcast 及 YouTube 頻道，
           <br />
-          每天自動收到 AI 摘要及重點股票趨勢分析
+          輸入 Email 就能每天收到 AI 摘要
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/signup">
-            <Button size="lg" className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold text-lg px-8 py-6 cursor-pointer transition-all hover:scale-105">
-              開始免費試用
-              <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Button>
-          </Link>
-          <p className="text-slate-500 text-sm">
-            免費試用 7 天，無需信用卡
-          </p>
-        </div>
+        <SignupForm id="signup" />
 
         {/* Trust Indicators */}
         <div className="mt-16 flex flex-wrap items-center justify-center gap-8 text-slate-500 text-sm">
@@ -75,7 +133,7 @@ export default function HomePage() {
             <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>股票情緒分析</span>
+            <span>節目重點比對</span>
           </div>
         </div>
       </div>
@@ -112,8 +170,8 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold text-lg mb-1">7 天免費體驗</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed">連續 7 天每天收到完整電子報，體驗結束後改為每週三一封</p>
+                  <h3 className="text-white font-semibold text-lg mb-1">每日 AI 摘要</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">自動整理你追蹤的投資節目，每天送到信箱</p>
                 </div>
               </div>
             </div>
@@ -126,20 +184,15 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold text-lg mb-1">無需信用卡</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed">填入 Email 即可開始，不需要綁定任何付款資訊</p>
+                  <h3 className="text-white font-semibold text-lg mb-1">完全免費</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">只需輸入 Email，無需信用卡，無任何費用</p>
                 </div>
               </div>
             </div>
 
-            <Link href="/signup">
-              <Button size="lg" className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold text-lg py-6 cursor-pointer transition-all hover:scale-[1.02] mt-2">
-                開始免費試用
-                <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </Button>
-            </Link>
+            <div className="mt-2">
+              <SignupForm />
+            </div>
           </div>
 
           {/* Right: Email mockup with two pages */}
@@ -158,11 +211,11 @@ export default function HomePage() {
           <FeatureCard
             icon={
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
             }
-            title="自動追蹤"
-            description="支援多個熱門台股、美股投資 Podcast 及 YouTube 頻道，自動抓取最新集數"
+            title="輸入 Email 訂閱"
+            description="只需輸入 Email 就能開始，涵蓋多個熱門台股、美股投資 Podcast 及 YouTube 頻道"
           />
           <FeatureCard
             icon={
@@ -170,8 +223,8 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             }
-            title="AI 分析"
-            description="AI 自動轉錄並分析內容，提取關鍵觀點與投資洞見"
+            title="節目觀點整理"
+            description="AI 自動彙整節目中提到的股票觀點與看法，方便快速比對不同來源"
           />
           <FeatureCard
             icon={
@@ -179,91 +232,9 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             }
-            title="每日摘要"
-            description="每天自動收到精華摘要，包含提到的股票與主持人看法"
+            title="每日重點摘要"
+            description="每天收到節目重點彙整，包含提到的股票與情緒分布，節省研究時間"
           />
-        </div>
-      </div>
-
-      {/* Pricing */}
-      <div className="max-w-4xl mx-auto px-4 py-20">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold text-white mb-4">選擇你的方案</h2>
-          <p className="text-slate-400">免費開始，隨時升級</p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Free Plan */}
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-8 border border-slate-700/50 hover:border-slate-600 transition-colors cursor-pointer">
-            <h3 className="text-xl font-semibold text-white mb-2">免費版</h3>
-            <p className="text-4xl font-bold text-white mb-1">
-              $0
-            </p>
-            <p className="text-slate-500 mb-6">永久免費</p>
-            <ul className="space-y-4 text-slate-300 mb-8">
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                全部來源整合摘要
-              </li>
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                前 7 天每日摘要
-              </li>
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-emerald-400/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-slate-400">之後每週三收到</span>
-              </li>
-            </ul>
-            <Link href="/signup" className="block">
-              <Button className="w-full bg-slate-700 hover:bg-slate-600 text-white border border-slate-500 font-semibold cursor-pointer" size="lg">
-                免費開始
-              </Button>
-            </Link>
-          </div>
-
-          {/* Paid Plan */}
-          <div className="relative bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-2xl p-8 border border-amber-500/30 hover:border-amber-500/50 transition-colors cursor-pointer">
-            <div className="absolute -top-3 right-6 bg-amber-500 text-slate-900 text-sm font-bold px-3 py-1 rounded-full">
-              推薦
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-2">專業版</h3>
-            <div className="flex items-baseline gap-3 mb-1">
-              <p className="text-4xl font-bold text-white">NT$99</p>
-              <p className="text-xl text-slate-500 line-through">NT$199</p>
-            </div>
-            <p className="text-slate-500 mb-6">每月・前兩個月特價</p>
-            <ul className="space-y-4 text-slate-300 mb-8">
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                全部來源整合摘要
-              </li>
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                每天收到最新摘要
-              </li>
-              <li className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                優先支援
-              </li>
-            </ul>
-            <Link href="/upgrade" className="block">
-              <Button className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer" size="lg">
-                升級專業版
-              </Button>
-            </Link>
-          </div>
         </div>
       </div>
 
@@ -366,7 +337,7 @@ function EmailMockup() {
 
               {/* Bullish signals */}
               <div className="space-y-2">
-                <p className="font-bold text-slate-800 text-sm">📈 看漲訊號</p>
+                <p className="font-bold text-slate-800 text-sm">📊 KOL 看多觀點</p>
                 <div className="border-l-4 border-emerald-500 bg-emerald-50/50 rounded-r-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-emerald-700 font-bold text-sm">TSMC</span>
@@ -389,7 +360,7 @@ function EmailMockup() {
               <div className="relative h-12 mt-2">
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white" />
                 <div className="absolute bottom-0 left-0 right-0 text-center">
-                  <p className="text-slate-400 text-xs">還有更多訊號與深度分析⋯⋯</p>
+                  <p className="text-slate-400 text-xs">還有更多觀點與來源⋯⋯</p>
                 </div>
               </div>
             </div>
@@ -398,7 +369,7 @@ function EmailMockup() {
             <div className="px-5 py-4 space-y-4" style={{ width: `${100 / PAGE_COUNT}%` }}>
               {/* Bearish signals */}
               <div className="space-y-2">
-                <p className="font-bold text-slate-800 text-sm">📉 看空訊號</p>
+                <p className="font-bold text-slate-800 text-sm">📊 KOL 看空觀點</p>
                 <div className="border-l-4 border-red-500 bg-red-50/50 rounded-r-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-red-700 font-bold text-sm">某檔個股</span>

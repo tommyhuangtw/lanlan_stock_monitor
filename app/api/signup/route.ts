@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { createMagicLink } from '@/lib/auth';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { getLatestCompletedDigest, generateCombinationKey } from '@/lib/digest-cache';
+import { formatDateTaipei } from '@/lib/digest-cache';
 import { injectMagicLinkToHtml } from '@/lib/email-generator';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { Resend } from 'resend';
+import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { email } = await request.json();
+    const { email, marketingConsent } = await request.json();
 
     // Validate input
     if (!email || !email.includes('@')) {
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
       .insert({
         email: email.toLowerCase().trim(),
         is_paid: false,
+        marketing_consent: marketingConsent === true,
       })
       .select()
       .single();
@@ -79,41 +80,58 @@ export async function POST(request: NextRequest) {
     const sourceNames = sources?.map(s => s.name).join('、') || '全部熱門投資 Podcast 及 YouTube 頻道';
     const allSourceIds = sources?.map(s => s.id) || [];
 
-    // Create magic link for the welcome email
-    const magicLinkUrl = await createMagicLink(user.id);
+    // Generate HMAC-based unsubscribe URL (never expires)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const magicLinkToken = new URL(magicLinkUrl).searchParams.get('token');
-    const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${magicLinkToken}`;
+    const unsubscribeSecret = process.env.UNSUBSCRIBE_SECRET || process.env.RESEND_API_KEY || 'fallback-secret';
+    const unsubscribeSig = crypto.createHmac('sha256', unsubscribeSecret).update(user.id).digest('hex');
+    const unsubscribeUrl = `${baseUrl}/api/unsubscribe?uid=${user.id}&sig=${unsubscribeSig}`;
 
     // Try to get the latest real digest to include in welcome email
     let emailSubject = '歡迎加入 懶懶財經速報！這是你的第一封摘要範例';
     let emailHtml = '';
 
     try {
-      const latestDigest = allSourceIds.length > 0
-        ? await getLatestCompletedDigest(supabaseAdmin, allSourceIds)
-        : null;
+      // Find any recent completed daily digest (regardless of source combination)
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
+      const cutoffStr = formatDateTaipei(cutoffDate);
+
+      const { data: latestDigest } = await supabaseAdmin
+        .from('daily_digests')
+        .select('*')
+        .eq('email_type', 'daily')
+        .eq('status', 'completed')
+        .gte('digest_date', cutoffStr)
+        .not('episode_ids', 'eq', '{}')
+        .order('digest_date', { ascending: false })
+        .limit(1)
+        .single();
 
       if (latestDigest?.html_template) {
         // Use real digest with welcome header
-        const digestHtml = injectMagicLinkToHtml(latestDigest.html_template, magicLinkUrl, unsubscribeUrl);
-        emailHtml = injectWelcomeHeader(digestHtml, sourceNames, magicLinkUrl);
-        emailSubject = '歡迎加入 懶懶財經速報！這是最新一期投資摘要';
+        const digestHtml = injectMagicLinkToHtml(latestDigest.html_template, baseUrl, unsubscribeUrl);
+        const todayStr = formatDateTaipei(new Date());
+        const digestDate = latestDigest.digest_date as string;
+        const isToday = digestDate === todayStr;
+        emailHtml = injectWelcomeHeader(digestHtml, sourceNames, isToday ? null : digestDate);
+        emailSubject = isToday
+          ? '歡迎加入 懶懶財經速報！這是最新一期投資摘要'
+          : `歡迎加入 懶懶財經速報！這是 ${digestDate} 的投資摘要`;
       } else {
         // Fallback to example content
         const exampleAnalyses = await fetchExampleAnalyses();
-        emailHtml = generateWelcomeEmailWithExample(sourceNames, magicLinkUrl, exampleAnalyses);
+        emailHtml = generateWelcomeEmailWithExample(sourceNames, exampleAnalyses);
       }
     } catch (digestError) {
       console.error('Error fetching digest for welcome email:', digestError);
       // Fallback to example content
       const exampleAnalyses = await fetchExampleAnalyses();
-      emailHtml = generateWelcomeEmailWithExample(sourceNames, magicLinkUrl, exampleAnalyses);
+      emailHtml = generateWelcomeEmailWithExample(sourceNames, exampleAnalyses);
     }
 
     // Send welcome email
     try {
-      const { error: emailError } = await resend.emails.send({
+      const { data: emailResult, error: emailError } = await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
         to: email,
         subject: emailSubject,
@@ -131,6 +149,16 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           email_type: 'welcome',
           subject: emailSubject,
+          resend_id: emailResult?.id,
+        });
+
+        getPostHogServer()?.capture({
+          distinctId: user.id,
+          event: 'email_sent',
+          properties: {
+            email_type: 'welcome',
+            resend_id: emailResult?.id,
+          },
         });
       }
     } catch (emailError) {
@@ -141,7 +169,9 @@ export async function POST(request: NextRequest) {
     getPostHogServer()?.capture({
       distinctId: user.id,
       event: 'user_signed_up',
-      properties: { email: email.toLowerCase().trim() },
+      properties: {
+        email: email.toLowerCase().trim(),
+      },
     });
 
     return NextResponse.json({
@@ -243,75 +273,37 @@ function getSampleAnalyses(): ExampleAnalysis[] {
 function injectWelcomeHeader(
   digestHtml: string,
   sourceNames: string,
-  magicLinkUrl: string
+  digestDate: string | null = null
 ): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  // Simple welcome banner to insert INSIDE the main-card, right after the gradient header
+  const welcomeBanner = `
+      <div style="background:#ecfdf5;border-bottom:2px solid #10b981;padding:16px 20px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#065f46;">🎉 歡迎加入！你已成功註冊</p>
+        <p style="margin:0;font-size:13px;color:#047857;">${digestDate ? `以下是 ${digestDate} 的投資摘要（今日暫無新節目更新）` : '以下是最新一期的投資摘要'}</p>
+        <p style="margin:6px 0 0;font-size:12px;color:#6b7280;">從明天起，你每天都會收到海內外知名投資 KOL 的 AI 摘要 Email</p>
+      </div>`;
 
-  const welcomeBlock = `
-    <div style="max-width:600px; width:100%; margin:0 auto 16px; background-color:#334155; border-radius:12px; padding:32px; box-shadow:0 4px 20px rgba(0,0,0,0.08); text-align:left;">
-      <!-- Header -->
-      <div style="text-align: center; margin-bottom: 28px;">
-        <img src="${baseUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius: 10px; display: inline-block; margin-bottom: 14px;" />
-        <h1 style="color: #FFFFFF; font-size: 24px; font-weight: 700; margin: 0 0 8px 0;">歡迎加入懶懶財經速報！</h1>
-        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
-      </div>
-
-      <!-- Timeline -->
-      <div style="margin-bottom: 24px;">
-        <p style="color: #FFFFFF; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">接下來會發生什麼？</p>
-        <div style="border-left: 2px solid #64748B; padding-left: 20px; margin-left: 8px;">
-          <div style="margin-bottom: 16px;">
-            <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0;">現在</p>
-            <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！以下是最新一期的投資摘要</p>
-          </div>
-          <div style="margin-bottom: 16px;">
-            <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
-            <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
-          </div>
-          <div>
-            <p style="color: #CBD5E1; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
-            <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封・<a href="${baseUrl}/upgrade" style="color: #F59E0B; text-decoration: none;">升級專業版</a>可繼續每天收到</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Upgrade CTA -->
-      <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center;">
-        <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 10px 0;">&#127873; 新用戶限時優惠</p>
-        <p style="color: #FFFFFF; font-size: 22px; font-weight: 700; margin: 0 0 4px 0;"><span style="text-decoration: line-through; color: #94A3B8; font-size: 14px; font-weight: 400; margin-right: 8px;">NT$199/月</span>NT$99/月</p>
-        <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 18px 0;">前兩個月享半價，升級後每天收到最新摘要</p>
-        <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 700; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>
-        <p style="color: #94A3B8; font-size: 11px; margin: 10px 0 0 0;">7 天內升級才享有此優惠</p>
-      </div>
-    </div>
-  `;
-
-  // Insert welcome block BEFORE the main-card div (as a separate card)
-  const mainCardMatch = digestHtml.match(/<div class="main-card"/);
-  if (mainCardMatch && mainCardMatch.index !== undefined) {
-    return digestHtml.slice(0, mainCardMatch.index) + welcomeBlock + digestHtml.slice(mainCardMatch.index);
+  // Find the end of the gradient header block and insert after it
+  // The header ends with a </p></div> after the date/source count line
+  const headerEndPattern = /(<p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">.*?<\/p>\s*<\/div>)/;
+  const match = digestHtml.match(headerEndPattern);
+  if (match && match.index !== undefined) {
+    const insertPos = match.index + match[0].length;
+    return digestHtml.slice(0, insertPos) + welcomeBanner + digestHtml.slice(insertPos);
   }
 
-  // Fallback: insert before the first major content div after <center>
-  const centerMatch = digestHtml.match(/<center>\s*/);
-  if (centerMatch && centerMatch.index !== undefined) {
-    const insertPos = centerMatch.index + centerMatch[0].length;
-    return digestHtml.slice(0, insertPos) + welcomeBlock + digestHtml.slice(insertPos);
+  // Fallback: insert after the warning disclaimer bar at the top of main-card
+  const disclaimerEnd = digestHtml.indexOf('不構成投資建議</p></div>');
+  if (disclaimerEnd !== -1) {
+    const insertPos = disclaimerEnd + '不構成投資建議</p></div>'.length;
+    return digestHtml.slice(0, insertPos) + welcomeBanner + digestHtml.slice(insertPos);
   }
 
-  // Last resort: prepend before body content
-  const bodyMatch = digestHtml.match(/<body[^>]*>/);
-  if (bodyMatch && bodyMatch.index !== undefined) {
-    const insertPos = bodyMatch.index + bodyMatch[0].length;
-    return digestHtml.slice(0, insertPos) + '<center>' + welcomeBlock + '</center>' + digestHtml.slice(insertPos);
-  }
-
-  return welcomeBlock + digestHtml;
+  return digestHtml;
 }
 
 function generateWelcomeEmailWithExample(
   sourceNames: string,
-  magicLinkUrl: string,
   exampleAnalyses: ExampleAnalysis[]
 ): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -364,32 +356,10 @@ function generateWelcomeEmailWithExample(
       <p style="color: #CBD5E1; font-size: 14px; margin: 0;">你的 AI 投資 Podcast 及 YouTube 摘要助手</p>
     </div>
 
-    <!-- Timeline -->
+    <!-- Info -->
     <div style="margin-bottom: 24px;">
-      <p style="color: #FFFFFF; font-size: 16px; font-weight: 600; margin: 0 0 16px 0;">接下來會發生什麼？</p>
-      <div style="border-left: 2px solid #64748B; padding-left: 20px; margin-left: 8px;">
-        <div style="margin-bottom: 16px;">
-          <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0;">現在</p>
-          <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">你已成功註冊！</p>
-        </div>
-        <div style="margin-bottom: 16px;">
-          <p style="color: #F59E0B; font-size: 14px; font-weight: 600; margin: 0;">前 7 天</p>
-          <p style="color: #E2E8F0; font-size: 14px; margin: 4px 0 0 0;">每天收到最新摘要（免費體驗）</p>
-        </div>
-        <div>
-          <p style="color: #CBD5E1; font-size: 14px; font-weight: 600; margin: 0;">第 8 天起</p>
-          <p style="color: #CBD5E1; font-size: 14px; margin: 4px 0 0 0;">免費版改為每週一封・<a href="${baseUrl}/upgrade" style="color: #F59E0B; text-decoration: none;">升級專業版</a>可繼續每天收到</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Upgrade CTA -->
-    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 10px 0;">&#127873; 新用戶限時優惠</p>
-      <p style="color: #FFFFFF; font-size: 22px; font-weight: 700; margin: 0 0 4px 0;"><span style="text-decoration: line-through; color: #94A3B8; font-size: 14px; font-weight: 400; margin-right: 8px;">NT$199/月</span>NT$99/月</p>
-      <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 18px 0;">前兩個月享半價，升級後每天收到最新摘要</p>
-      <a href="${baseUrl}/upgrade" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 700; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 15px;">立即升級 →</a>
-      <p style="color: #94A3B8; font-size: 11px; margin: 10px 0 0 0;">7 天內升級才享有此優惠</p>
+      <p style="color: #10B981; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">你已成功註冊！</p>
+      <p style="color: #CBD5E1; font-size: 13px; margin: 0;">從明天起，你每天都會收到最新的投資節目 AI 摘要 Email。</p>
     </div>
 
     <!-- Example Section -->
@@ -404,8 +374,7 @@ function generateWelcomeEmailWithExample(
     <!-- Footer -->
     <hr style="border: none; border-top: 1px solid #475569; margin: 24px 0;">
     <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0;">
-      懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube<br>
-      <a href="${magicLinkUrl}" style="color: #94A3B8; text-decoration: underline;">管理訂閱</a>
+      懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube
     </p>
   </div>
 </body>

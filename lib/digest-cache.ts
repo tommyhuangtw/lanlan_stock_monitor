@@ -403,7 +403,7 @@ export async function recordEmailSent(
   supabase: SupabaseClient,
   digestId: number,
   userId: string,
-  magicLinkUrl: string,
+  magicLinkUrl?: string,
   resendId?: string
 ): Promise<void> {
   await supabase

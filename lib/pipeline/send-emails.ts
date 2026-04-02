@@ -13,26 +13,7 @@ import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 const BATCH_SIZE = 10;
-
-// Inline createMagicLink to avoid importing lib/auth.ts
-// (which has top-level `import { cookies } from 'next/headers'`)
-async function createMagicLink(userId: string, expiresInMs = 15 * 60 * 1000): Promise<string> {
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + expiresInMs);
-
-  await supabaseAdmin
-    .from('magic_links')
-    .insert({
-      user_id: userId,
-      token,
-      expires_at: expiresAt.toISOString(),
-    });
-
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${baseUrl}/auth/verify?token=${token}`;
-}
 
 // Generate HMAC-based unsubscribe URL (never expires)
 function generateUnsubscribeUrl(userId: string): string {
@@ -42,13 +23,130 @@ function generateUnsubscribeUrl(userId: string): string {
   return `${baseUrl}/api/unsubscribe?uid=${userId}&sig=${signature}`;
 }
 
-// Calculate days between two dates using Taipei timezone
-function daysSinceSignupTaipei(createdAt: string): number {
-  const todayStr = formatDateTaipei(new Date());
-  const createdStr = formatDateTaipei(new Date(createdAt));
-  return Math.floor(
-    (new Date(todayStr).getTime() - new Date(createdStr).getTime()) / (1000 * 60 * 60 * 24)
-  );
+const BMC_URL = 'https://buymeacoffee.com/ailanrenbao';
+
+// Days of week to show BMC block (Tuesday=2, Friday=5)
+const BMC_SHOW_DAYS = [2, 5];
+
+const BMC_VARIANTS = [
+  {
+    headline: '今天的摘要幫你省了多少研究時間？',
+    cta: '請我喝杯咖啡',
+    subtitle: '你的一杯咖啡 = 我們一天的 AI 運算費用',
+  },
+  {
+    headline: '懶懶財經速報是一人獨立開發維運的專案',
+    cta: '支持獨立創作者',
+    subtitle: '每一份支持都讓這個專案走得更遠 🙏',
+  },
+  {
+    headline: '覺得每天的摘要有幫助嗎？',
+    cta: '請我喝杯咖啡',
+    subtitle: '免費訂閱也完全沒問題，分享給朋友也是最大的支持！',
+  },
+  {
+    headline: '一杯咖啡的價格，支持我們持續為你整理投資情報',
+    cta: '買杯咖啡給我們',
+    subtitle: '你的支持是我們持續營運的最大動力！',
+  },
+];
+
+function shouldShowBmc(daysSinceSignup: number, today: Date): boolean {
+  if (daysSinceSignup < 7) return false;
+  const dayOfWeek = today.getDay();
+  return BMC_SHOW_DAYS.includes(dayOfWeek);
+}
+
+function pickBmcVariant(dateStr: string): typeof BMC_VARIANTS[number] {
+  const hash = dateStr.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0);
+  return BMC_VARIANTS[hash % BMC_VARIANTS.length];
+}
+
+// Possible BMC insertion positions, rotated by date
+// Each returns the index to insert BEFORE, or -1 if not found
+type InsertionFinder = (html: string) => number;
+
+const BMC_POSITIONS: { name: string; find: InsertionFinder }[] = [
+  {
+    // After 今日總覽 section — user just saw the highlights, peak value moment
+    name: 'after-overview',
+    find: (html) => {
+      const overviewStart = html.indexOf('今日總覽');
+      if (overviewStart === -1) return -1;
+      // Find the section's closing </div></div> (the overview card wrapper)
+      const sectionEnd = html.indexOf('</div>\n  </div>', overviewStart);
+      return sectionEnd !== -1 ? sectionEnd + '</div>\n  </div>'.length : -1;
+    },
+  },
+  {
+    // After 風險提醒 / before 近期催化劑 — natural reading break in the middle
+    name: 'mid-content',
+    find: (html) => {
+      // Before catalysts section
+      const catalystIdx = html.indexOf('近期催化劑');
+      if (catalystIdx !== -1) {
+        // Find the <div style="padding:20px 16px;"> that wraps this section
+        const sectionStart = html.lastIndexOf('<div style="padding:20px 16px;">', catalystIdx);
+        return sectionStart !== -1 ? sectionStart : -1;
+      }
+      // Fallback: before 值得關注
+      const monitorIdx = html.indexOf('值得關注');
+      if (monitorIdx !== -1) {
+        const sectionStart = html.lastIndexOf('<div style="padding:20px 16px;">', monitorIdx);
+        return sectionStart !== -1 ? sectionStart : -1;
+      }
+      return -1;
+    },
+  },
+  {
+    // After all episode summaries — user finished reading, satisfaction peak
+    name: 'after-episodes',
+    find: (html) => {
+      const unsubIdx = html.indexOf('<div style="padding:16px 20px;text-align:center;border-top:1px solid #eee;">');
+      if (unsubIdx !== -1) return unsubIdx;
+      const adSlotIdx = html.indexOf('<!-- AD_SLOT_BOTTOM -->');
+      if (adSlotIdx !== -1) return adSlotIdx;
+      return -1;
+    },
+  },
+];
+
+function pickBmcPosition(dateStr: string): number {
+  const hash = dateStr.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0);
+  return hash % BMC_POSITIONS.length;
+}
+
+function injectBuyMeACoffee(html: string, dateStr: string): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org';
+  const variant = pickBmcVariant(dateStr);
+
+  const bmcBlock = `<div style="padding:24px 16px;text-align:center;border-top:1px solid #e5e7eb;">
+    <p style="margin:0 0 12px;font-size:15px;color:#334155;font-weight:600;">${variant.headline}</p>
+    <a href="${BMC_URL}" target="_blank" style="display:inline-block;padding:12px 28px;background:#FFDD00;color:#000;font-size:14px;font-weight:700;text-decoration:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      ☕ ${variant.cta}
+    </a>
+    <p style="margin:10px 0 0;font-size:12px;color:#64748b;">${variant.subtitle}</p>
+  </div>`;
+
+  // Pick position based on date (rotates across different days)
+  const posIdx = pickBmcPosition(dateStr);
+  const positions = BMC_POSITIONS;
+
+  // Try preferred position first, then fallback through others
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[(posIdx + i) % positions.length];
+    const insertIdx = pos.find(html);
+    if (insertIdx !== -1) {
+      return html.slice(0, insertIdx) + bmcBlock + html.slice(insertIdx);
+    }
+  }
+
+  // Ultimate fallback
+  const endMatch = html.lastIndexOf('</div>\n  </center>');
+  if (endMatch !== -1) {
+    return html.slice(0, endMatch) + bmcBlock + html.slice(endMatch);
+  }
+  return html;
 }
 
 export interface SendEmailsResult {
@@ -83,9 +181,6 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
   const today = new Date();
   const dateStr = formatDateTaipei(today);
-  // Use Taipei timezone for day-of-week check
-  const todayTaipei = formatDateTaipei(today);
-  const isWednesday = new Date(todayTaipei).getDay() === 3;
 
   // Get all active users (exclude unsubscribed)
   const { data: users, error: usersError } = await supabaseAdmin
@@ -118,7 +213,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   for (let i = 0; i < users.length; i += BATCH_SIZE) {
     const batch = users.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
-      batch.map(user => processUser(user, allSourceIds, today, dateStr, isWednesday))
+      batch.map(user => processUser(user, allSourceIds, today, dateStr))
     );
 
     for (const result of batchResults) {
@@ -145,7 +240,6 @@ async function processUser(
   allSourceIds: string[],
   today: Date,
   dateStr: string,
-  isWednesday: boolean,
 ): Promise<ProcessUserResult> {
   const result: ProcessUserResult = {
     sent: false,
@@ -155,108 +249,16 @@ async function processUser(
     alreadySent: false,
   };
 
-  // Lazy sync: if user has stripe_customer_id but is_paid is false,
-  // check Stripe for active subscription (mirrors /api/auth/me logic)
-  if (user.stripe_customer_id && !user.is_paid && process.env.STRIPE_SECRET_KEY) {
-    try {
-      const Stripe = (await import('stripe')).default;
-      const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
-      const subscriptions = await stripeClient.subscriptions.list({
-        customer: user.stripe_customer_id as string,
-        status: 'active',
-        limit: 1,
-      });
-      if (subscriptions.data.length > 0) {
-        await supabaseAdmin
-          .from('users')
-          .update({
-            is_paid: true,
-            stripe_subscription_id: subscriptions.data[0].id,
-          })
-          .eq('id', user.id);
-        user.is_paid = true;
-        console.log(`[sendEmails] Lazy-synced is_paid=true for ${user.email}`);
-      }
-    } catch (err) {
-      console.warn(`[sendEmails] Stripe sync failed for ${user.email}:`, err);
-    }
-  }
-
-  // Calculate days since signup using Taipei timezone
-  const daysSinceSignup = daysSinceSignupTaipei(user.created_at as string);
-
-  // Day 7: send trial-end reminder email for free users, skip regular digest
-  if (!user.is_paid && daysSinceSignup === 7) {
-    try {
-      // Check if already sent trial_end email
-      const { data: alreadySentTrialEnd } = await supabaseAdmin
-        .from('email_logs')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('email_type', 'trial_end')
-        .limit(1)
-        .single();
-
-      if (!alreadySentTrialEnd) {
-        const trialMagicLink = await createMagicLink(user.id as string, THREE_DAYS_MS);
-        const trialBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const trialUnsubUrl = generateUnsubscribeUrl(user.id as string);
-
-        const { data: trialResult, error: trialError } = await resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-          to: user.email as string,
-          subject: '你的每日摘要體驗已結束',
-          html: generateTrialEndEmail(trialMagicLink, `${trialBaseUrl}/upgrade`, trialUnsubUrl),
-          headers: {
-            'List-Unsubscribe': `<${trialUnsubUrl}>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-          },
-        });
-
-        if (!trialError) {
-          await supabaseAdmin.from('email_logs').insert({
-            user_id: user.id,
-            email_type: 'trial_end',
-            subject: '你的每日摘要體驗已結束',
-            resend_id: trialResult?.id,
-          });
-          result.sent = true;
-        }
-      }
-    } catch (e) {
-      result.error = `Trial end email error for ${user.email}: ${e}`;
-    }
-    // Skip regular digest on day 7 (avoid overlap with Wednesday email)
-    result.skipped = true;
-    return result;
-  }
-
-  // Determine if should send
-  // paid = daily, free trial (< 7 days) = daily, free after trial = Wednesday only
-  let shouldSend = false;
-
-  if (user.is_paid) {
-    shouldSend = true;
-  } else if (daysSinceSignup < 7) {
-    shouldSend = true;
-  } else if (isWednesday) {
-    shouldSend = true;
-  }
-
-  if (!shouldSend) {
-    result.skipped = true;
-    return result;
-  }
-
-  // Determine email type based on user state
-  const emailType: 'daily' | 'weekly' =
-    (user.is_paid || daysSinceSignup < 7) ? 'daily' : 'weekly';
+  const emailType = 'daily';
 
   try {
+    // All users receive the same digest with all sources
+    const userSourceIds = allSourceIds;
+
     // Get cached digest
     const cacheResult = await getCachedDigest(
       supabaseAdmin,
-      allSourceIds,
+      userSourceIds,
       emailType,
       today
     );
@@ -287,33 +289,21 @@ async function processUser(
       return result;
     }
 
-    // Generate user-specific magic link (7-day expiry for email links)
-    const magicLinkUrl = await createMagicLink(user.id as string, THREE_DAYS_MS);
-
     // Generate HMAC-based unsubscribe URL (never expires)
     const unsubscribeUrl = generateUnsubscribeUrl(user.id as string);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-    // Inject magic link and unsubscribe URL into cached HTML
-    let emailHtml = injectMagicLinkToHtml(digest.html_template, magicLinkUrl, unsubscribeUrl);
+    // Inject URLs into cached HTML (homepage for manage link, unsubscribe for opt-out)
+    let emailHtml = injectMagicLinkToHtml(digest.html_template, baseUrl, unsubscribeUrl);
 
-    // Inject trial CTA for free trial users (at the top of email)
-    let emailSubject = `今日懶懶財經速報 - ${dateStr}`;
-    if (!user.is_paid && daysSinceSignup < 7) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const upgradeUrl = `${baseUrl}/upgrade`;
-      const trialCta = generateTrialCta(daysSinceSignup, upgradeUrl);
-      emailHtml = emailHtml.replace('<!-- CTA_INJECTION_POINT -->', trialCta);
-
-      // Add trial countdown to subject with urgency escalation
-      const daysLeft = 7 - daysSinceSignup;
-      if (daysLeft <= 1) {
-        emailSubject = `⚠ 今日懶懶財經速報 - ${dateStr}（限時優惠最後一天！）`;
-      } else if (daysLeft <= 3) {
-        emailSubject = `⏰ 今日懶懶財經速報 - ${dateStr}（限時優惠倒數 ${daysLeft} 天）`;
-      } else {
-        emailSubject = `今日懶懶財經速報 - ${dateStr}（還剩 ${daysLeft} 天）`;
-      }
+    // Show "Buy Me a Coffee" block: only on specific weekdays, for users signed up 7+ days ago
+    const createdAt = new Date(user.created_at as string);
+    const daysSinceSignup = (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    if (shouldShowBmc(daysSinceSignup, today)) {
+      emailHtml = injectBuyMeACoffee(emailHtml, dateStr);
     }
+
+    const emailSubject = `今日懶懶財經速報 - ${dateStr}`;
 
     // Send email
     const { data: emailResult, error: emailError } = await resend.emails.send({
@@ -337,7 +327,7 @@ async function processUser(
       supabaseAdmin,
       digest.id,
       user.id as string,
-      magicLinkUrl,
+      undefined,
       emailResult?.id
     );
 
@@ -358,113 +348,21 @@ async function processUser(
 
     result.sent = true;
 
+    // Track email sent in PostHog
+    const { getPostHogServer } = await import('../posthog-server');
+    getPostHogServer()?.capture({
+      distinctId: user.id as string,
+      event: 'email_sent',
+      properties: {
+        email_type: emailType,
+        resend_id: emailResult?.id,
+        source_count: userSourceIds.length,
+      },
+    });
+
   } catch (emailError) {
     result.error = `Error sending email to ${user.email}: ${emailError}`;
   }
 
   return result;
-}
-
-function generateTrialCta(daysSinceSignup: number, upgradeUrl: string): string {
-  const daysLeft = 7 - daysSinceSignup;
-  const NT = 'NT';
-
-  let headline: string;
-  let footnote = '';
-  let bgGradient: string;
-  let borderColor: string;
-  let headlineColor: string;
-  let btnBg: string;
-  let btnTextColor: string;
-
-  if (daysLeft <= 1) {
-    // Red — last day (matches frontend red-500 urgency)
-    headline = '⚠ 最後一天！優惠價即將結束';
-    footnote = '<p style="color: #6B7280; font-size: 11px; margin: 10px 0 0 0;">明天起升級價格恢復為 ' + NT + '$199/月</p>';
-    bgGradient = 'rgba(239, 68, 68, 0.12), rgba(220, 38, 38, 0.06)';
-    borderColor = 'rgba(239, 68, 68, 0.4)';
-    headlineColor = '#EF4444';
-    btnBg = '#EF4444';
-    btnTextColor = '#FFFFFF';
-  } else if (daysLeft <= 3) {
-    // Orange + urgency copy
-    headline = '⏰ 優惠即將結束，還剩 ' + daysLeft + ' 天';
-    bgGradient = 'rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.06)';
-    borderColor = 'rgba(245, 158, 11, 0.3)';
-    headlineColor = '#D97706';
-    btnBg = '#F59E0B';
-    btnTextColor = '#0F172A';
-  } else {
-    // Orange — normal
-    headline = '限時優惠還剩 ' + daysLeft + ' 天';
-    bgGradient = 'rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.06)';
-    borderColor = 'rgba(245, 158, 11, 0.3)';
-    headlineColor = '#D97706';
-    btnBg = '#F59E0B';
-    btnTextColor = '#0F172A';
-  }
-
-  return '<div style="padding: 16px 20px;">'
-    + '<div style="background: linear-gradient(135deg, ' + bgGradient + '); border: 1px solid ' + borderColor + '; border-radius: 12px; padding: 20px; text-align: center;">'
-    + '<p style="color: ' + headlineColor + '; font-size: 15px; font-weight: 600; margin: 0 0 8px 0;">' + headline + '</p>'
-    + '<p style="color: #1E293B; font-size: 20px; font-weight: 700; margin: 0 0 4px 0;">'
-    + '<span style="text-decoration: line-through; color: #9CA3AF; font-size: 14px; font-weight: 400; margin-right: 8px;">' + NT + '$199/月</span>'
-    + NT + '$99/月</p>'
-    + '<p style="color: #64748B; font-size: 13px; margin: 0 0 14px 0;">升級專業版，繼續每天收到最新摘要</p>'
-    + '<a href="' + upgradeUrl + '" style="display: inline-block; background-color: ' + btnBg + '; color: ' + btnTextColor + '; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px;">'
-    + NT + '$99/月 升級專業版 →</a>'
-    + footnote
-    + '</div></div>';
-}
-
-function generateTrialEndEmail(magicLinkUrl: string, upgradeUrl: string, unsubscribeUrl: string): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0F172A; padding: 40px 20px; margin: 0;">
-  <div style="max-width: 560px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; padding: 40px; border: 1px solid #475569;">
-    <!-- Header -->
-    <div style="text-align: center; margin-bottom: 32px;">
-      <img src="${process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org'}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;margin-bottom:16px;" />
-      <h1 style="color: #FFFFFF; font-size: 22px; margin: 0 0 8px 0;">你的每日摘要體驗已結束</h1>
-      <p style="color: #CBD5E1; font-size: 14px; margin: 0;">過去 7 天，你每天都收到了最新的投資摘要</p>
-    </div>
-
-    <!-- What changes -->
-    <div style="background-color: #0F172A; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-      <p style="color: #FFFFFF; font-size: 15px; font-weight: 600; margin: 0 0 12px 0;">從今天起有什麼不同？</p>
-      <div style="display: flex; margin-bottom: 8px;">
-        <span style="color: #EF4444; margin-right: 8px;">✕</span>
-        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">不再每天收到摘要</p>
-      </div>
-      <div style="display: flex;">
-        <span style="color: #10B981; margin-right: 8px;">✓</span>
-        <p style="color: #CBD5E1; font-size: 14px; margin: 0;">改為每週三收到一封週報</p>
-      </div>
-    </div>
-
-    <!-- Promo CTA -->
-    <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
-      <p style="color: #FBBF24; font-size: 13px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">限時優惠</p>
-      <p style="color: #FFFFFF; font-size: 18px; font-weight: 700; margin: 0 0 4px 0;"><span style="text-decoration: line-through; color: #94A3B8; font-size: 14px; font-weight: 400; margin-right: 8px;">NT$199/月</span>前兩個月只要 NT$99/月</p>
-      <p style="color: #CBD5E1; font-size: 13px; margin: 0 0 16px 0;">升級專業版，繼續每天收到最新投資摘要</p>
-      <a href="${upgradeUrl}" style="display: inline-block; background-color: #F59E0B; color: #0F172A; font-weight: 700; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-size: 16px;">
-        立即升級 - NT$99/月 →
-      </a>
-      <p style="color: #94A3B8; font-size: 11px; margin: 12px 0 0 0;">錯過優惠後，升級價格為 NT$199/月</p>
-    </div>
-
-    <!-- Footer -->
-    <hr style="border: none; border-top: 1px solid #475569; margin: 24px 0;">
-    <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0;">
-      懶懶財經速報 - AI 自動摘要投資 Podcast 及 YouTube<br>
-      <a href="${magicLinkUrl}" style="color: #94A3B8; text-decoration: underline;">管理訂閱</a>
-      &nbsp;·&nbsp;
-      <a href="${unsubscribeUrl}" style="color: #94A3B8; text-decoration: underline;">取消訂閱</a>
-    </p>
-  </div>
-</body>
-</html>
-`;
 }

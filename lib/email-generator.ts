@@ -49,7 +49,14 @@ function consensusBadge(c: string | undefined): string {
 
 function priceLevelBlock(pl: string | undefined): string {
   if (!pl || pl === '無' || pl === 'N/A' || pl === '無具體價位' || pl.trim() === '') return '';
-  return `<div style="margin-top:8px;padding:6px 10px;background:#f8f9fa;border-radius:6px;font-size:12px;color:#555;">💰 ${escHtml(pl)}</div>`;
+  return `<div style="margin-top:8px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;font-size:12px;color:#78350f;"><span style="font-weight:600;">💬 KOL 提及價位：</span>${escHtml(pl)}</div>`;
+}
+
+/** Ad slot configuration for future ad insertion */
+export interface AdSlotConfig {
+  enabled: boolean;
+  position: 'top' | 'mid' | 'bottom';
+  html: string;
 }
 
 export interface HtmlBlocks {
@@ -84,7 +91,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
 
   // Header
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ailanbao.org';
-  const header = `<div style="background:linear-gradient(135deg,#1e3a5f 0%,#234e78 50%,#2a6298 100%);padding:32px 16px;border-radius:12px 12px 0 0;text-align:center;"><div style="margin-bottom:8px;"><img src="${appUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;" /></div><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">懶懶財經速報</h1><p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
+  const header = `<div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;border-radius:12px 12px 0 0;text-align:center;"><p style="margin:0;font-size:12px;color:#92400e;font-weight:600;">⚠️ 本服務為資訊彙整工具，內容來自 KOL 公開發言，不構成投資建議</p></div><div style="background:linear-gradient(135deg,#1e3a5f 0%,#234e78 50%,#2a6298 100%);padding:32px 16px;text-align:center;"><div style="margin-bottom:8px;"><img src="${appUrl}/icon.png" width="48" height="48" alt="懶懶財經速報" style="border-radius:10px;display:inline-block;" /></div><h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;letter-spacing:1px;">懶懶財經速報</h1><p style="color:#ffffff;margin:8px 0 0;font-size:15px;font-weight:500;">${escHtml(date)} ｜ 分析 ${totalSources} 個來源</p></div>`;
 
   // Bullish signals
   let bullishHtml = '';
@@ -96,14 +103,15 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         for (const s of sig.sources) {
           sourcesHtml += `<div style="margin:4px 0;padding:6px 10px;background:#f8f9fa;border-radius:6px;font-size:13px;"><strong>${escHtml(s.kol)}</strong>：${escHtml(s.reason)}`;
           if (s.action && s.action !== '無') {
-            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#fff;background:#27ae60;margin-left:4px;">${escHtml(s.action)}</span>`;
+            const actionText = s.action.startsWith('已') ? s.action : `表達${s.action}`;
+            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
           }
           sourcesHtml += ` ${confidenceBadge(s.confidence)}</div>`;
         }
       }
       cards += `<div style="border-left:4px solid #27ae60;background:#fff;padding:16px;margin-bottom:12px;border-radius:0 8px 8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;"><span style="font-size:18px;font-weight:700;color:#27ae60;">${escHtml(sig.ticker)}</span>${consensusBadge(sig.consensus)}${timeHorizonTag(sig.timeHorizon)}</div><div style="margin-top:8px;">${sourcesHtml}</div>${priceLevelBlock(sig.priceLevel)}</div>`;
     }
-    bullishHtml = `<div style="padding:20px 16px;"><h2 style="color:#27ae60;font-size:18px;margin:0 0 16px;">📈 看漲訊號 (${bullish.length})</h2>${cards}</div>`;
+    bullishHtml = `<div style="padding:20px 16px;"><h2 style="color:#16a34a;font-size:18px;margin:0 0 4px;">📊 KOL 看多觀點 (${bullish.length})</h2><p style="font-size:11px;color:#64748b;margin:0 0 16px;font-style:italic;">以下為 KOL 在節目中提及的看多標的，僅供參考比對</p>${cards}</div>`;
   }
 
   // Bearish signals
@@ -116,7 +124,8 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         for (const s of sig.sources) {
           sourcesHtml += `<div style="margin:4px 0;padding:6px 10px;background:#fdf2f2;border-radius:6px;font-size:13px;"><strong>${escHtml(s.kol)}</strong>：${escHtml(s.reason)}`;
           if (s.action && s.action !== '無') {
-            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#fff;background:#e74c3c;margin-left:4px;">${escHtml(s.action)}</span>`;
+            const actionText = s.action.startsWith('已') ? s.action : `表達${s.action}`;
+            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
           }
           sourcesHtml += ` ${confidenceBadge(s.confidence)}</div>`;
         }
@@ -126,7 +135,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         : '';
       cards += `<div style="border-left:4px solid #e74c3c;background:#fff;padding:16px;margin-bottom:12px;border-radius:0 8px 8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;"><span style="font-size:18px;font-weight:700;color:#e74c3c;">${escHtml(sig.ticker)}</span>${consensusBadge(sig.consensus)}${timeHorizonTag(sig.timeHorizon)}</div><div style="margin-top:8px;">${sourcesHtml}</div>${divergence}${priceLevelBlock(sig.priceLevel)}</div>`;
     }
-    bearishHtml = `<div style="padding:20px 16px;"><h2 style="color:#e74c3c;font-size:18px;margin:0 0 16px;">📉 看空訊號 (${bearish.length})</h2>${cards}</div>`;
+    bearishHtml = `<div style="padding:20px 16px;"><h2 style="color:#dc2626;font-size:18px;margin:0 0 4px;">📊 KOL 看空觀點 (${bearish.length})</h2><p style="font-size:11px;color:#64748b;margin:0 0 16px;font-style:italic;">以下為 KOL 在節目中提及的看空標的，僅供參考比對</p>${cards}</div>`;
   }
 
   // Risk alerts
@@ -196,26 +205,17 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
       const linkColor = ep.source === 'youtube' ? '#e74c3c' : '#8e44ad';
       const linkText = ep.source === 'youtube' ? '🎬 前往觀看' : '🎧 前往收聽';
 
-      let highlightsHtml = '';
-      if (ep.highlights && ep.highlights.length > 0) {
-        let hItems = '';
-        for (const h of ep.highlights) {
-          hItems += `<li style="margin-bottom:6px;font-size:14px;color:#333;list-style:none;padding-left:16px;position:relative;"><span style="position:absolute;left:0;color:#27ae60;">●</span>${escHtml(h)}</li>`;
-        }
-        highlightsHtml = `<ul style="margin:12px 0;padding:0;list-style:none;">${hItems}</ul>`;
-      }
-
-      const summaryText = ep.detailedSummary || ep.oneLiner || '';
-      const summaryHtml = summaryText
-        ? `<div style="margin-top:10px;padding:12px;background:#f8f9fa;border-radius:6px;font-size:13px;color:#555;line-height:1.6;word-break:break-word;">${escHtml(summaryText)}</div>`
+      const oneLiner = ep.oneLiner || '';
+      const summaryHtml = oneLiner
+        ? `<div style="margin-top:10px;padding:10px;background:#f8f9fa;border-radius:6px;font-size:12px;color:#64748b;font-style:italic;border-left:3px solid #cbd5e1;">${escHtml(oneLiner.slice(0, 60))}${oneLiner.length > 60 ? '...' : ''}</div>`
         : '';
 
       const safeLink = ep.episodeLink && /^https?:\/\//.test(ep.episodeLink) ? ep.episodeLink : '';
       const linkBtn = safeLink
-        ? `<div style="margin-top:14px;text-align:center;"><a href="${escHtml(safeLink)}" target="_blank" style="display:block;padding:10px 24px;background:${linkColor};color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;text-align:center;max-width:100%;">${linkText}</a></div>`
-        : '';
+        ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;"><a href="${escHtml(safeLink)}" target="_blank" style="display:block;padding:10px 14px;background:#f8f9fa;color:#2563eb;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;text-align:center;border:1px solid #e5e7eb;">${linkText} 完整內容 →</a><p style="margin:8px 0 0;font-size:10px;color:#94a3b8;text-align:center;font-style:italic;">本摘要僅供快速參考，完整資訊請聽/看原始節目</p></div>`
+        : `<p style="margin-top:10px;font-size:11px;color:#94a3b8;text-align:center;font-style:italic;">請自行搜尋原始節目收聽/觀看完整內容</p>`;
 
-      cards += `<div style="background:#fff;padding:20px 16px;margin-bottom:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><span style="font-size:24px;margin-right:10px;">${icon}</span><div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:700;color:#333;word-break:break-word;">${escHtml(ep.podcast)}</div><div style="font-size:13px;color:#888;margin-top:2px;word-break:break-word;">${escHtml(ep.episode)}</div></div></div>${highlightsHtml}${summaryHtml}${linkBtn}</div>`;
+      cards += `<div style="background:#fff;padding:20px 16px;margin-bottom:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><span style="font-size:24px;margin-right:10px;">${icon}</span><div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:700;color:#333;word-break:break-word;">${escHtml(ep.podcast)}</div><div style="font-size:13px;color:#888;margin-top:2px;word-break:break-word;">${escHtml(ep.episode)}</div></div></div>${summaryHtml}${linkBtn}</div>`;
     }
     episodesHtml = `<div style="padding:20px 16px;"><h2 style="color:#333;font-size:18px;margin:0 0 16px;">🎧🎬 節目重點摘要</h2>${cards}</div>`;
   }
@@ -229,7 +229,19 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   const thermometer = `<div style="padding:20px 16px;"><h2 style="color:#333;font-size:18px;margin:0 0 12px;">🌡️ 市場溫度計</h2><div style="display:flex;align-items:center;margin-bottom:8px;"><span style="font-size:13px;color:#27ae60;font-weight:600;margin-right:6px;white-space:nowrap;">看漲 ${bullCount}</span><div style="flex:1;min-width:0;height:24px;border-radius:12px;overflow:hidden;display:flex;background:#eee;"><div style="width:${bullPct}%;background:linear-gradient(90deg,#27ae60,#2ecc71);height:100%;"></div><div style="width:${bearPct}%;background:linear-gradient(90deg,#e74c3c,#c0392b);height:100%;"></div></div><span style="font-size:13px;color:#e74c3c;font-weight:600;margin-left:6px;white-space:nowrap;">看空 ${bearCount}</span></div><div id="market-mood" style="font-size:14px;color:#555;font-style:italic;text-align:center;"></div></div>`;
 
   // Footer
-  const footer = `<div style="padding:20px 16px;background:#f8f9fa;border-radius:0 0 12px 12px;text-align:center;"><p style="font-size:12px;color:#999;margin:0;">⚠️ 此報告由 AI 自動生成，僅供參考，不構成投資建議。投資有風險，請自行判斷。</p><p style="font-size:11px;color:#bbb;margin:6px 0 0;">由懶懶財經速報系統自動產生</p></div>`;
+  const footer = `<div style="padding:24px 16px;background:#f8f9fa;border-radius:0 0 12px 12px;">
+    <div style="background:#fff;border:2px solid #f59e0b;border-radius:10px;padding:16px;margin-bottom:14px;">
+      <p style="font-size:13px;color:#92400e;margin:0 0 10px;font-weight:700;">⚠️ 重要聲明</p>
+      <ul style="margin:0;padding-left:22px;font-size:11px;color:#78350f;line-height:1.7;">
+        <li>本服務為獨立第三方資訊工具，與任何節目創作者<strong>無關聯、合作或背書關係</strong></li>
+        <li>所有內容由 AI 自動生成，可能存在理解偏差或技術錯誤</li>
+        <li>本服務僅彙整 KOL 公開發言，<strong>不構成投資建議</strong></li>
+        <li>投資決策應基於您自己的研究判斷，本服務不對投資結果負責</li>
+        <li>所有內容版權歸原節目創作者所有</li>
+      </ul>
+    </div>
+    <p style="font-size:10px;color:#94a3b8;margin:0;text-align:center;">由懶懶財經速報自動產生 · <a href="${appUrl}/terms" style="color:#94a3b8;text-decoration:underline;">服務條款</a></p>
+  </div>`;
 
   return {
     header,
@@ -351,19 +363,30 @@ export function assembleEmail(
   manageLinkUrl?: string,
   unsubscribeLinkUrl?: string,
   marketBrief?: MarketBrief,
+  adSlots?: AdSlotConfig[],
 ): string {
   // Build integrated "今日總覽" overview section
   const overviewHtml = buildOverviewSection(blocks, quickDigest, marketMood, marketBrief);
 
-  // Add manage subscription link section
-  const unsubscribeHtml = unsubscribeLinkUrl
-    ? ` · <a href="${escHtml(unsubscribeLinkUrl)}" style="font-size:12px;color:#999;text-decoration:underline;">取消訂閱</a>`
-    : '';
-  const manageLinkHtml = manageLinkUrl
+  // Add unsubscribe link section
+  const manageLinkHtml = unsubscribeLinkUrl
     ? `<div style="padding:16px 20px;text-align:center;border-top:1px solid #eee;">
-        <a href="${escHtml(manageLinkUrl)}" style="font-size:13px;color:#666;text-decoration:underline;">管理訂閱設定</a>${unsubscribeHtml}
+        <a href="${escHtml(unsubscribeLinkUrl)}" style="font-size:13px;color:#999;text-decoration:underline;">取消訂閱</a>
        </div>`
     : '';
+
+  // Resolve ad slots
+  const adSlotMap = new Map<string, string>();
+  if (adSlots) {
+    for (const slot of adSlots) {
+      if (slot.enabled && slot.html) {
+        adSlotMap.set(slot.position, slot.html);
+      }
+    }
+  }
+  const adTop = adSlotMap.get('top') || '<!-- AD_SLOT_TOP -->';
+  const adMid = adSlotMap.get('mid') || '<!-- AD_SLOT_MID -->';
+  const adBottom = adSlotMap.get('bottom') || '<!-- AD_SLOT_BOTTOM -->';
 
   const fullEmail = `
 <!DOCTYPE html>
@@ -399,15 +422,17 @@ export function assembleEmail(
   <center>
     <div class="main-card" style="max-width:600px; width:100%; margin:20px auto; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08); text-align:left;">
       ${blocks.header}
-      <!-- CTA_INJECTION_POINT -->
       ${overviewHtml}
+      ${adTop}
       ${blocks.bullish}
       ${blocks.bearish}
+      ${adMid}
       ${blocks.risk}
       ${blocks.catalyst}
       ${blocks.monitor}
       ${blocks.insights}
       ${blocks.episodes}
+      ${adBottom}
       ${manageLinkHtml}
       ${blocks.footer}
     </div>
@@ -463,5 +488,8 @@ export function injectMagicLinkToHtml(htmlTemplate: string, magicLinkUrl: string
   if (unsubscribeUrl) {
     html = html.replace(new RegExp(UNSUBSCRIBE_LINK_PLACEHOLDER, 'g'), unsubscribeUrl);
   }
+  // Strip "管理訂閱設定" link from old cached templates (no longer needed since dashboard was removed)
+  // Matches: <a href="...">管理訂閱設定</a> followed by optional " · " separator
+  html = html.replace(/<a[^>]*>管理訂閱設定<\/a>\s*(?:·\s*)?/g, '');
   return html;
 }

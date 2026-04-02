@@ -53,51 +53,17 @@ function ThankYouContent() {
             我們已將一封範例摘要寄到 <span className="text-amber-400 font-medium">{email}</span>
           </p>
           <p className="text-emerald-400/80 text-sm font-medium">
-            點擊信中的「登入帳戶」按鈕即可進入控制台
+            從明天起，你每天都會收到最新的投資摘要
           </p>
         </div>
 
-        {/* Timeline Card */}
+        {/* What's next */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-8 mb-8">
-          <h3 className="font-semibold text-white mb-6">接下來會發生什麼？</h3>
-
-          <div className="space-y-6">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold">
-                1
-              </div>
-              <div>
-                <p className="font-medium text-white">前 7 天</p>
-                <p className="text-sm text-slate-400">每天收到最新 Youtube 和 Podcast 投資訊號摘要</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold">
-                2
-              </div>
-              <div>
-                <p className="font-medium text-slate-400">第 8 天起</p>
-                <p className="text-sm text-slate-500">免費版改為每週一封（週三發送）</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Upgrade CTA */}
-        <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-2xl border border-amber-500/30 p-8 text-center mb-8">
-          <h3 className="text-xl font-bold text-white mb-2">想要每天收到摘要？</h3>
-          <p className="text-slate-400 mb-6">升級專業版，每天比別人早一步掌握投資訊號</p>
-          <p className="text-white text-2xl font-bold mb-1">
-            <span className="text-slate-500 line-through text-lg font-normal mr-2">NT$199/月</span>
-            NT$99/月
+          <h3 className="font-semibold text-white mb-4">接下來會發生什麼？</h3>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            每天會自動收到最新的投資 Podcast 及 YouTube 節目 AI 摘要 Email，幫你節省研究時間。
+            如需取消訂閱，可隨時點擊信中的「取消訂閱」連結。
           </p>
-          <p className="text-amber-400/80 text-sm mb-6">前兩個月限時優惠・7 天內升級</p>
-          <Link href="/upgrade">
-            <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer" size="lg">
-              升級專業版 →
-            </Button>
-          </Link>
         </div>
 
         {/* Tips */}
@@ -115,7 +81,7 @@ function ThankYouContent() {
         {/* Back Button */}
         <div className="text-center">
           <Link href="/">
-            <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">
+            <Button className="bg-slate-700 text-white hover:bg-slate-600 border border-slate-600 cursor-pointer">
               返回首頁
             </Button>
           </Link>

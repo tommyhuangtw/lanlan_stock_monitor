@@ -16,11 +16,11 @@ export default function TermsPage() {
       <div className="max-w-3xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold text-white mb-8">服務條款</h1>
         <div className="prose prose-invert prose-slate max-w-none space-y-6 text-slate-300 leading-relaxed">
-          <p className="text-sm text-slate-500">最後更新日期：2026 年 2 月</p>
+          <p className="text-sm text-slate-500">最後更新日期：2026 年 4 月</p>
 
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">1. 服務描述</h2>
-            <p>「懶懶財經速報」是一項<strong className="text-white">資訊彙整工具</strong>，提供公開 Podcast 及 YouTube 節目的檢索功能。用戶自行決定追蹤哪些來源，AI 自動彙整 KOL 在節目中的公開發言，並以電子郵件方式寄送觀點摘要給訂閱用戶。</p>
+            <p>「懶懶財經速報」是一項<strong className="text-white">免費的資訊彙整工具</strong>，自動追蹤多個熱門投資 Podcast 及 YouTube 頻道，由 AI 彙整 KOL 在節目中的公開發言，並以每日電子郵件方式寄送觀點摘要給訂閱用戶。</p>
           </section>
 
           <section>
@@ -37,8 +37,7 @@ export default function TermsPage() {
             <h3 className="text-lg font-semibold text-white mt-6 mb-3">關於內容來源</h3>
             <ul className="list-disc pl-6 space-y-2.5 text-slate-400 leading-relaxed">
               <li>本服務為獨立第三方工具，與任何 Podcast 或 YouTube 創作者及節目<strong className="text-amber-400">無任何關聯、合作或背書關係</strong></li>
-              <li>所有內容來自<strong className="text-white">用戶自行選擇追蹤</strong>的公開可得節目</li>
-              <li>我們不主動選擇內容來源，而是由用戶決定追蹤哪些節目</li>
+              <li>所有內容來自<strong className="text-white">公開可得</strong>的 Podcast 及 YouTube 節目</li>
               <li>所有版權歸原節目創作者所有，我們僅提供簡短摘要與原始連結</li>
             </ul>
 
@@ -64,7 +63,6 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mt-8 mb-3">3. 用戶責任</h2>
             <ul className="list-disc pl-6 space-y-2.5 text-slate-400 leading-relaxed">
-              <li>用戶應自行選擇追蹤的節目來源</li>
               <li>用戶應自行驗證所有資訊的準確性</li>
               <li>用戶應理解本服務為資訊工具，不是投資決策依據</li>
               <li>用戶的投資決策完全由其個人負責，與本服務無關</li>
@@ -72,35 +70,22 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">4. 訂閱方案</h2>
-            <ul className="list-disc pl-6 space-y-2 text-slate-400">
-              <li><strong className="text-slate-300">免費版</strong> — 前 7 天完整體驗（所有來源、每日摘要），之後可追蹤最多 3 個節目，每週三收到摘要。</li>
-              <li><strong className="text-slate-300">專業版（NT$199/月）</strong> — 自選追蹤節目、每日收到最新摘要，可隨時取消。</li>
-            </ul>
+            <h2 className="text-xl font-semibold text-white mt-8 mb-3">4. 訂閱與取消</h2>
+            <p>本服務為免費訂閱制。用戶可隨時透過 Email 中的退訂連結取消訂閱，取消後將不再收到每日摘要 Email。如需重新訂閱，可回首頁重新註冊。</p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">5. 付款與退款</h2>
-            <p>專業版採月繳制，透過 Stripe 安全處理付款。取消訂閱後，服務將持續至當期結束。我們不提供已使用期間的退款。</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">6. 帳號終止</h2>
-            <p>我們保留在以下情況終止或暫停您帳號的權利：違反服務條款、濫用服務、或其他影響服務正常運作的行為。</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">7. 服務變更</h2>
+            <h2 className="text-xl font-semibold text-white mt-8 mb-3">5. 服務變更</h2>
             <p>我們保留隨時修改、暫停或終止服務的權利。重大變更將透過電子郵件通知用戶。</p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">8. 責任限制</h2>
+            <h2 className="text-xl font-semibold text-white mt-8 mb-3">6. 責任限制</h2>
             <p>本服務按「現狀」提供。我們不對因使用本服務所產生的任何投資損失負責。AI 分析結果可能存在誤差，用戶應自行驗證資訊的準確性。</p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-white mt-8 mb-3">9. 適用法律</h2>
+            <h2 className="text-xl font-semibold text-white mt-8 mb-3">7. 適用法律</h2>
             <p>本服務條款受中華民國法律管轄。</p>
           </section>
         </div>

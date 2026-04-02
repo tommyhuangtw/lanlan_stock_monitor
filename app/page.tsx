@@ -63,12 +63,12 @@ function SignupForm({ id }: { id?: string }) {
           ) : '免費訂閱'}
         </Button>
       </div>
-      <label className="flex items-start gap-2 mt-3 cursor-pointer">
+      <label className="flex items-center gap-2 mt-3 cursor-pointer">
         <input
           type="checkbox"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/20 cursor-pointer"
+          className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500/20 cursor-pointer flex-shrink-0"
         />
         <span className="text-xs text-slate-400">
           我同意接收懶懶財經速報的電子報及行銷資訊，並同意<a href="/terms" target="_blank" className="text-amber-400 hover:underline">服務條款</a>

@@ -89,11 +89,6 @@ export default function HomePage() {
             <img src="/icon.png" className="w-8 h-8 rounded-lg" alt="懶懶財經速報" />
             <span className="font-semibold text-white">懶懶財經速報</span>
           </div>
-          <a href="#signup">
-            <Button className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold cursor-pointer">
-              免費訂閱
-            </Button>
-          </a>
         </div>
       </nav>
 

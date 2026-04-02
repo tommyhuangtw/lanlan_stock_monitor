@@ -45,30 +45,55 @@ export async function POST(request: NextRequest) {
     // Check if user already exists
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, is_unsubscribed')
       .eq('email', email.toLowerCase().trim())
       .single();
 
-    if (existingUser) {
+    let user;
+
+    if (existingUser && existingUser.is_unsubscribed) {
+      // Re-activate unsubscribed user
+      const { data: reactivated, error: reactivateError } = await supabaseAdmin
+        .from('users')
+        .update({
+          is_unsubscribed: false,
+          marketing_consent: marketingConsent === true,
+        })
+        .eq('id', existingUser.id)
+        .select()
+        .single();
+
+      if (reactivateError) {
+        throw new Error(reactivateError.message);
+      }
+      user = reactivated;
+
+      getPostHogServer()?.capture({
+        distinctId: user.id,
+        event: 'user_resubscribed',
+        properties: { method: 'signup_form' },
+      });
+    } else if (existingUser) {
       return NextResponse.json(
         { error: '此 Email 已註冊' },
         { status: 400 }
       );
-    }
+    } else {
+      // Create new user
+      const { data: newUser, error: userError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          email: email.toLowerCase().trim(),
+          is_paid: false,
+          marketing_consent: marketingConsent === true,
+        })
+        .select()
+        .single();
 
-    // Create user
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .insert({
-        email: email.toLowerCase().trim(),
-        is_paid: false,
-        marketing_consent: marketingConsent === true,
-      })
-      .select()
-      .single();
-
-    if (userError) {
-      throw new Error(userError.message);
+      if (userError) {
+        throw new Error(userError.message);
+      }
+      user = newUser;
     }
 
     // Get all active sources

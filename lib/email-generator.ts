@@ -205,9 +205,18 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
       const linkColor = ep.source === 'youtube' ? '#e74c3c' : '#8e44ad';
       const linkText = ep.source === 'youtube' ? '🎬 前往觀看' : '🎧 前往收聽';
 
-      const oneLiner = ep.oneLiner || '';
-      const summaryHtml = oneLiner
-        ? `<div style="margin-top:10px;padding:10px;background:#f8f9fa;border-radius:6px;font-size:12px;color:#64748b;font-style:italic;border-left:3px solid #cbd5e1;">${escHtml(oneLiner.slice(0, 60))}${oneLiner.length > 60 ? '...' : ''}</div>`
+      // Show full detailedSummary + highlights (fallback to oneLiner)
+      const summaryText = ep.detailedSummary || ep.oneLiner || '';
+      let highlightsHtml = '';
+      if (ep.highlights && ep.highlights.length > 0) {
+        let hItems = '';
+        for (const h of ep.highlights) {
+          hItems += `<li style="margin-bottom:4px;padding-left:4px;">${escHtml(h)}</li>`;
+        }
+        highlightsHtml = `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#475569;line-height:1.6;">${hItems}</ul>`;
+      }
+      const summaryHtml = summaryText
+        ? `<div style="margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border-left:3px solid #cbd5e1;"><div style="font-size:13px;color:#334155;line-height:1.6;">${escHtml(summaryText)}</div>${highlightsHtml}</div>`
         : '';
 
       const safeLink = ep.episodeLink && /^https?:\/\//.test(ep.episodeLink) ? ep.episodeLink : '';

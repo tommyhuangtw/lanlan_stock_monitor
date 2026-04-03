@@ -389,7 +389,7 @@ const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）
       "sentiment": "bullish/bearish/neutral",
       "oneLiner": "一句話摘要",
       "detailedSummary": "詳細摘要",
-      "highlights": ["重點1", "重點2"],
+      "highlights": ["重點1", "重點2", "重點3", "重點4", "重點5"],
       "source": "podcast"
     }
   ]
@@ -399,6 +399,7 @@ const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）
 - 直接輸出純 JSON，不要用 \`\`\`json 包裹
 - bullishSignals/bearishSignals/monitorSignals 必須從輸入的 signals 提取，不可為空（除非輸入真的沒有）
 - ⚠️ episodeSummaries 是必填欄位！每一集節目都必須有摘要（oneLiner、detailedSummary、highlights）
+- ⚠️ highlights 必須有 3-5 個重點，每個重點用簡短一句話概括節目中的關鍵資訊
 - ⚠️ 看漲訊號最多保留 10 個，看空訊號最多保留 8 個（按重要性排序）
 - 只保留有實質分析理由的訊號，沒有明確理由的不要收錄
 - 將剩餘的歸入 monitorSignals

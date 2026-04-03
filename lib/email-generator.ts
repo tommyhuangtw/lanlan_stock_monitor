@@ -6,6 +6,43 @@
 import { ConsolidatedReport } from './openrouter';
 import type { MarketBrief } from './stock-research';
 
+// Platform links for podcast/YouTube shows
+const PLATFORM_LINKS: Record<string, { apple?: string; spotify?: string; kkbox?: string; youtube?: string }> = {
+  '股癌': {
+    apple: 'https://podcasts.apple.com/us/podcast/gooaye-%E8%82%A1%E7%99%8C/id1500839292',
+    spotify: 'https://open.spotify.com/show/1zWxx5pKk0XBEzMupVC7UZ',
+    kkbox: 'https://podcast.kkbox.com/sg/channel/0ogFO_N3A9IEgjUEhY',
+  },
+  '航海王': {
+    apple: 'https://podcasts.apple.com/gh/podcast/%E7%BE%8E%E8%82%A1%E8%88%AA%E6%B5%B7%E7%8E%8B/id1689219140',
+    spotify: 'https://open.spotify.com/show/16unn8TIxj7OQ2exSd0NPk',
+    kkbox: 'https://podcast.kkbox.com/sg/channel/P_WUCQ1b7808qRJRVC',
+  },
+  '韭菜': {
+    apple: 'https://podcasts.apple.com/us/podcast/%E9%9F%AD%E8%8F%9C%E7%95%A2%E6%A5%AD%E7%8F%AD/id1711618619',
+    spotify: 'https://open.spotify.com/show/66ENh5UtNA3pPNOT0IZjO1',
+    kkbox: 'https://podcast.kkbox.com/tw/channel/_Xr8gNm40P-sxy2TQw',
+  },
+  '珍妮': {
+    apple: 'https://podcasts.apple.com/us/podcast/%E7%BE%8E%E8%82%A1%E6%8A%95%E8%B3%87%E5%AD%B8-%E8%B2%A1%E5%A5%B3%E7%8F%8D%E5%A6%AE/id1546879892',
+    spotify: 'https://open.spotify.com/show/3dTKJkvceKNHaYoh7Przbg',
+    kkbox: 'https://podcast.kkbox.com/tw/channel/0rQ3Nqkt3BhkWsKc3Y',
+  },
+  '皓角': {
+    apple: 'https://podcasts.apple.com/us/podcast/%E6%B8%B8%E5%BA%AD%E7%9A%93%E7%9A%84%E8%B2%A1%E7%B6%93%E7%9A%93%E8%A7%92/id1488295306',
+    spotify: 'https://open.spotify.com/show/1HOGxT9M7a6kpcDi4q27Q7',
+    kkbox: 'https://podcast.kkbox.com/sg/channel/P_QhqQ1b7808pZTCQ0',
+  },
+};
+
+function findPlatformLinks(podcastName: string) {
+  const name = podcastName.toLowerCase();
+  for (const [keyword, links] of Object.entries(PLATFORM_LINKS)) {
+    if (name.includes(keyword)) return links;
+  }
+  return null;
+}
+
 function escHtml(str: string | undefined | null): string {
   if (!str) return '';
   return String(str)
@@ -201,32 +238,68 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
 
     let cards = '';
     for (const ep of sortedEpisodes) {
-      const icon = ep.source === 'youtube' ? '🎬' : '🎧';
-      const linkColor = ep.source === 'youtube' ? '#e74c3c' : '#8e44ad';
-      const linkText = ep.source === 'youtube' ? '🎬 前往觀看' : '🎧 前往收聽';
-
-      // Show full detailedSummary + highlights (fallback to oneLiner)
+      const isYoutube = ep.source === 'youtube';
+      const linkText = isYoutube ? '前往觀看完整內容' : '前往收聽完整內容';
       const summaryText = ep.detailedSummary || ep.oneLiner || '';
+
+      // --- Highlights (shown first for scannability) ---
       let highlightsHtml = '';
       if (ep.highlights && ep.highlights.length > 0) {
         let hItems = '';
         for (const h of ep.highlights) {
-          hItems += `<li style="margin-bottom:4px;padding-left:4px;">${escHtml(h)}</li>`;
+          hItems += `<li style="margin:0 0 6px;padding-left:6px;font-size:14px;color:#1e293b;line-height:1.5;">${escHtml(h)}</li>`;
         }
-        highlightsHtml = `<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#475569;line-height:1.6;">${hItems}</ul>`;
+        highlightsHtml = `<div style="margin-top:14px;"><ul style="margin:0;padding-left:20px;list-style-type:disc;">${hItems}</ul></div>`;
       }
+
+      // --- Detailed summary (shown after highlights) ---
       const summaryHtml = summaryText
-        ? `<div style="margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border-left:3px solid #cbd5e1;"><div style="font-size:13px;color:#334155;line-height:1.6;">${escHtml(summaryText)}</div>${highlightsHtml}</div>`
+        ? `<div style="margin-top:12px;padding:12px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;"><div style="font-size:13px;color:#475569;line-height:1.7;">${escHtml(summaryText)}</div></div>`
         : '';
 
       const safeLink = ep.episodeLink && /^https?:\/\//.test(ep.episodeLink) ? ep.episodeLink : '';
-      const linkBtn = safeLink
-        ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;"><a href="${escHtml(safeLink)}" target="_blank" style="display:block;padding:10px 14px;background:#f8f9fa;color:#2563eb;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;text-align:center;border:1px solid #e5e7eb;">${linkText} 完整內容 →</a><p style="margin:8px 0 0;font-size:10px;color:#94a3b8;text-align:center;font-style:italic;">本摘要僅供快速參考，完整資訊請聽/看原始節目</p></div>`
-        : `<p style="margin-top:10px;font-size:11px;color:#94a3b8;text-align:center;font-style:italic;">請自行搜尋原始節目收聽/觀看完整內容</p>`;
 
-      cards += `<div style="background:#fff;padding:20px 16px;margin-bottom:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);"><div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><span style="font-size:24px;margin-right:10px;">${icon}</span><div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:700;color:#333;word-break:break-word;">${escHtml(ep.podcast)}</div><div style="font-size:13px;color:#888;margin-top:2px;word-break:break-word;">${escHtml(ep.episode)}</div></div></div>${summaryHtml}${linkBtn}</div>`;
+      // --- Platform links for podcast shows ---
+      const platformLinks = !isYoutube ? findPlatformLinks(ep.podcast) : null;
+      let footerHtml: string;
+
+      if (platformLinks) {
+        // Pill-style platform buttons with icons
+        const pillBase = 'display:inline-block;padding:6px 14px;margin:0 4px 4px 0;border-radius:20px;text-decoration:none;font-size:12px;font-weight:600;vertical-align:middle;';
+        const imgBase = 'width:16px;height:16px;vertical-align:middle;margin-right:5px;border-radius:3px;';
+        const pills: string[] = [];
+        if (platformLinks.apple) pills.push(`<a href="${platformLinks.apple}" target="_blank" style="${pillBase}background:#f3f0ff;color:#7c3aed;border:1px solid #e0d6ff;"><img src="${appUrl}/platforms/apple-podcasts.png" alt="" style="${imgBase}" width="16" height="16" />Apple</a>`);
+        if (platformLinks.spotify) pills.push(`<a href="${platformLinks.spotify}" target="_blank" style="${pillBase}background:#ecfdf5;color:#059669;border:1px solid #d1fae5;"><img src="${appUrl}/platforms/spotify.png" alt="" style="${imgBase}" width="16" height="16" />Spotify</a>`);
+        if (platformLinks.kkbox) pills.push(`<a href="${platformLinks.kkbox}" target="_blank" style="${pillBase}background:#ecfeff;color:#0891b2;border:1px solid #cffafe;"><img src="${appUrl}/platforms/kkbox.png" alt="" style="${imgBase}" width="16" height="16" />KKBOX</a>`);
+        footerHtml = pills.length > 0
+          ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;"><div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">收聽完整節目</div><div>${pills.join('')}</div></div>`
+          : '';
+      } else if (safeLink) {
+        footerHtml = `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;"><a href="${escHtml(safeLink)}" target="_blank" style="display:block;padding:10px 16px;background:#f8fafc;color:#2563eb;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;text-align:center;border:1px solid #e2e8f0;">${linkText} →</a></div>`;
+      } else {
+        footerHtml = '';
+      }
+
+      // --- Disclaimer ---
+      const disclaimer = `<p style="margin:8px 0 0;font-size:10px;color:#cbd5e1;text-align:center;font-style:italic;">本摘要由 AI 自動產生，僅供快速參考</p>`;
+
+      // --- Card assembly ---
+      const sourceTag = isYoutube
+        ? `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:#dc2626;background:#fef2f2;margin-left:8px;vertical-align:middle;">YouTube</span>`
+        : `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:#7c3aed;background:#f5f3ff;margin-left:8px;vertical-align:middle;">Podcast</span>`;
+
+      cards += `<div style="background:#fff;padding:20px 18px;margin-bottom:14px;border-radius:12px;border:1px solid #e2e8f0;">` +
+        `<div style="margin-bottom:2px;">` +
+          `<div style="font-size:16px;font-weight:700;color:#0f172a;word-break:break-word;">${escHtml(ep.podcast)}${sourceTag}</div>` +
+          `<div style="font-size:13px;color:#64748b;margin-top:4px;word-break:break-word;">${escHtml(ep.episode)}</div>` +
+        `</div>` +
+        highlightsHtml +
+        summaryHtml +
+        footerHtml +
+        disclaimer +
+      `</div>`;
     }
-    episodesHtml = `<div style="padding:20px 16px;"><h2 style="color:#333;font-size:18px;margin:0 0 16px;">🎧🎬 節目重點摘要</h2>${cards}</div>`;
+    episodesHtml = `<div style="padding:20px 16px;"><h2 style="color:#0f172a;font-size:18px;margin:0 0 16px;">節目重點摘要</h2>${cards}</div>`;
   }
 
   // Thermometer

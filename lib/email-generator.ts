@@ -180,7 +180,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
   if (risks.length > 0) {
     let items = '';
     for (const r of risks) {
-      items += `<li style="margin-bottom:6px;font-size:14px;color:#721c24;">${escHtml(r)}</li>`;
+      items += `<li style="margin-bottom:6px;font-size:14px;color:#333;line-height:1.6;">${escHtml(r)}</li>`;
     }
     riskHtml = `<div style="padding:20px 16px;"><h2 style="color:#c0392b;font-size:18px;margin:0 0 16px;">⚠️ 風險提醒</h2><div style="border-left:4px solid #e74c3c;background:#fdf2f2;padding:16px;border-radius:0 8px 8px 0;"><ul style="margin:0;padding-left:20px;">${items}</ul></div></div>`;
   }
@@ -320,6 +320,10 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
 
   // Footer
   const footer = `<div style="padding:24px 16px;background:#f8f9fa;border-radius:0 0 12px 12px;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <p style="font-size:14px;color:#334155;margin:0 0 10px;">覺得實用嗎？分享給也在關注投資理財的朋友 👇</p>
+      <a href="${appUrl}" target="_blank" style="display:inline-block;padding:10px 28px;background:#334155;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">📮 邀請朋友訂閱</a>
+    </div>
     <div style="background:#fff;border:2px solid #f59e0b;border-radius:10px;padding:16px;margin-bottom:14px;">
       <p style="font-size:13px;color:#92400e;margin:0 0 10px;font-weight:700;">⚠️ 重要聲明</p>
       <ul style="margin:0;padding-left:22px;font-size:11px;color:#78350f;line-height:1.7;">
@@ -458,12 +462,15 @@ export function assembleEmail(
   // Build integrated "今日總覽" overview section
   const overviewHtml = buildOverviewSection(blocks, quickDigest, marketMood, marketBrief);
 
-  // Add unsubscribe link section
-  const manageLinkHtml = unsubscribeLinkUrl
-    ? `<div style="padding:16px 20px;text-align:center;border-top:1px solid #eee;">
-        <a href="${escHtml(unsubscribeLinkUrl)}" style="font-size:13px;color:#999;text-decoration:underline;">取消訂閱</a>
+  // Unsubscribe link (integrated into footer bottom)
+  const unsubscribeHtml = unsubscribeLinkUrl
+    ? `<div style="padding:12px 20px;text-align:center;">
+        <a href="${escHtml(unsubscribeLinkUrl)}" style="font-size:11px;color:#94a3b8;text-decoration:underline;">取消訂閱</a>
        </div>`
     : '';
+
+  // Section divider for visual rhythm
+  const divider = '<div style="padding:0 16px;"><div style="border-top:1px solid #e2e8f0;"></div></div>';
 
   // Resolve ad slots
   const adSlotMap = new Map<string, string>();
@@ -515,16 +522,22 @@ export function assembleEmail(
       ${overviewHtml}
       ${adTop}
       ${blocks.bullish}
+      ${blocks.bullish && blocks.bearish ? divider : ''}
       ${blocks.bearish}
       ${adMid}
+      ${(blocks.bullish || blocks.bearish) && blocks.risk ? divider : ''}
       ${blocks.risk}
+      ${blocks.risk && blocks.catalyst ? divider : ''}
       ${blocks.catalyst}
+      ${(blocks.risk || blocks.catalyst) && blocks.monitor ? divider : ''}
       ${blocks.monitor}
+      ${blocks.monitor && blocks.insights ? divider : ''}
       ${blocks.insights}
+      ${blocks.insights && blocks.episodes ? divider : ''}
       ${blocks.episodes}
       ${adBottom}
-      ${manageLinkHtml}
       ${blocks.footer}
+      ${unsubscribeHtml}
     </div>
   </center>
 </body>

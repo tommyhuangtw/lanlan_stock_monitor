@@ -324,7 +324,7 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
       <p style="font-size:14px;color:#334155;margin:0 0 12px;">覺得實用嗎？分享給也在關注投資理財的朋友 👇</p>
       <a href="${appUrl}" target="_blank" style="display:inline-block;padding:10px 28px;background:#334155;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">📮 邀請朋友訂閱</a>
       <div style="border-top:1px dashed #cbd5e1;margin:16px 0 12px;"></div>
-      <div style="margin-bottom:8px;"><img src="${appUrl}/ailanbao-logo.png" width="36" height="36" alt="AI懶人報" style="border-radius:50%;display:inline-block;" /></div>
+      <div style="margin-bottom:8px;"><img src="${appUrl}/ailanbao-logo.png" width="44" height="44" alt="AI懶人報" style="border-radius:50%;display:inline-block;" /></div>
       <p style="margin:0 0 8px;font-size:12px;color:#64748b;">追蹤 AI懶人報</p>
       <div>
         <a href="https://portaly.cc/ailrb" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-portaly.png" width="32" height="32" alt="Portaly" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>

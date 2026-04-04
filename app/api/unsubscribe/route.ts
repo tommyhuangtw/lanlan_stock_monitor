@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { syncContactUnsubscribeStatus } from '@/lib/resend-audience';
 import crypto from 'crypto';
 
 // Verify HMAC signature for unsubscribe URL
@@ -63,6 +64,9 @@ export async function GET(request: NextRequest) {
       .from('users')
       .update({ is_unsubscribed: true })
       .eq('id', userId);
+
+    // Sync unsubscribe status to Resend Audience
+    syncContactUnsubscribeStatus(userId, true);
 
     getPostHogServer()?.capture({
       distinctId: userId,

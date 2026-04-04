@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Webhook } from 'svix';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { syncContactUnsubscribeStatus } from '@/lib/resend-audience';
 
 interface ResendWebhookPayload {
   type: string;
@@ -86,6 +87,9 @@ export async function POST(request: NextRequest) {
       .from('users')
       .update({ is_unsubscribed: true })
       .eq('id', userId);
+
+    // Sync unsubscribe status to Resend Audience
+    syncContactUnsubscribeStatus(userId, true);
 
     getPostHogServer()?.capture({
       distinctId: userId,

@@ -4,6 +4,7 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { formatDateTaipei } from '@/lib/digest-cache';
 import { injectMagicLinkToHtml } from '@/lib/email-generator';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { syncContactOnSignup, syncContactUnsubscribeStatus } from '@/lib/resend-audience';
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
@@ -68,6 +69,9 @@ export async function POST(request: NextRequest) {
       }
       user = reactivated;
 
+      // Sync resubscribe status to Resend Audience
+      syncContactUnsubscribeStatus(user.id, false);
+
       getPostHogServer()?.capture({
         distinctId: user.id,
         event: 'user_resubscribed',
@@ -94,6 +98,9 @@ export async function POST(request: NextRequest) {
         throw new Error(userError.message);
       }
       user = newUser;
+
+      // Sync new contact to Resend Audience
+      syncContactOnSignup(user.id, user.email);
     }
 
     // Get all active sources

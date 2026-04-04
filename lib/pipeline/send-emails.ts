@@ -13,7 +13,8 @@ import crypto from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const BATCH_SIZE = 10;
+// Resend Batch API supports up to 100 emails per call
+const BATCH_SIZE = 100;
 
 // Generate HMAC-based unsubscribe URL (never expires)
 function generateUnsubscribeUrl(userId: string): string {
@@ -159,13 +160,15 @@ export interface SendEmailsResult {
   errors: string[];
 }
 
-interface ProcessUserResult {
-  sent: boolean;
-  cacheHit: boolean;
-  cacheMiss: boolean;
-  skipped: boolean;
-  alreadySent: boolean;
-  error?: string;
+// Prepared email data for a single user, ready for batch sending
+interface PreparedEmail {
+  userId: string;
+  email: string;
+  html: string;
+  subject: string;
+  unsubscribeUrl: string;
+  digestId: number;
+  episodeIds: number[];
 }
 
 export async function sendEmails(): Promise<SendEmailsResult> {
@@ -208,161 +211,157 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   }
 
   const allSourceIds = activeSources.map(s => s.id);
+  const emailType = 'daily';
 
-  // Process users in batches for parallel sending
-  for (let i = 0; i < users.length; i += BATCH_SIZE) {
-    const batch = users.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.allSettled(
-      batch.map(user => processUser(user, allSourceIds, today, dateStr))
-    );
+  // Get cached digest once (same for all users)
+  const cacheResult = await getCachedDigest(
+    supabaseAdmin,
+    allSourceIds,
+    emailType,
+    today
+  );
 
-    for (const result of batchResults) {
-      results.usersProcessed++;
-      if (result.status === 'fulfilled') {
-        const r = result.value;
-        if (r.sent) results.emailsSent++;
-        if (r.cacheHit) results.cacheHits++;
-        if (r.cacheMiss) results.cacheMisses++;
-        if (r.skipped) results.skipped++;
-        if (r.alreadySent) results.alreadySent++;
-        if (r.error) results.errors.push(r.error);
-      } else {
-        results.errors.push(`Unexpected error: ${result.reason}`);
+  if (!cacheResult.found) {
+    if (cacheResult.reason === 'no_content') {
+      results.skipped = users.length;
+      results.usersProcessed = users.length;
+      return results;
+    }
+    results.errors.push(`Cache miss (${cacheResult.reason}): ${generateCombinationKey(allSourceIds)}`);
+    results.cacheMisses = users.length;
+    results.usersProcessed = users.length;
+    return results;
+  }
+
+  results.cacheHits = 1;
+  const digest = cacheResult.digest!;
+  const emailSubject = `今日懶懶財經速報 - ${dateStr}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
+  // Phase 1: Prepare all emails (generate per-user HTML)
+  const preparedEmails: PreparedEmail[] = [];
+
+  for (const user of users) {
+    results.usersProcessed++;
+
+    try {
+      // Check if already sent to this user
+      const alreadySentToUser = await wasEmailSent(
+        supabaseAdmin,
+        digest.id,
+        user.id as string
+      );
+
+      if (alreadySentToUser) {
+        results.alreadySent++;
+        continue;
       }
+
+      // Generate HMAC-based unsubscribe URL (never expires)
+      const unsubscribeUrl = generateUnsubscribeUrl(user.id as string);
+
+      // Inject URLs into cached HTML
+      let emailHtml = injectMagicLinkToHtml(digest.html_template, baseUrl, unsubscribeUrl);
+
+      // Show "Buy Me a Coffee" block: only on specific weekdays, for users signed up 7+ days ago
+      const createdAt = new Date(user.created_at as string);
+      const daysSinceSignup = (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (shouldShowBmc(daysSinceSignup, today)) {
+        emailHtml = injectBuyMeACoffee(emailHtml, dateStr);
+      }
+
+      preparedEmails.push({
+        userId: user.id as string,
+        email: user.email as string,
+        html: emailHtml,
+        subject: emailSubject,
+        unsubscribeUrl,
+        digestId: digest.id,
+        episodeIds: digest.episode_ids,
+      });
+    } catch (err) {
+      results.errors.push(`Error preparing email for ${user.email}: ${err}`);
+    }
+  }
+
+  // Phase 2: Send in batches using Resend Batch API
+  const { getPostHogServer } = await import('../posthog-server');
+
+  for (let i = 0; i < preparedEmails.length; i += BATCH_SIZE) {
+    const batch = preparedEmails.slice(i, i + BATCH_SIZE);
+
+    const batchPayload = batch.map(entry => ({
+      from: fromEmail,
+      to: [entry.email],
+      subject: entry.subject,
+      html: entry.html,
+      headers: {
+        'List-Unsubscribe': `<${entry.unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    }));
+
+    try {
+      const { data: batchResult, error: batchError } = await resend.batch.send(batchPayload);
+
+      if (batchError) {
+        const errorMsg = `Batch send failed: ${batchError.message}`;
+        results.errors.push(errorMsg);
+        for (const entry of batch) {
+          results.errors.push(`Failed (batch error) for ${entry.email}`);
+        }
+        continue;
+      }
+
+      // Record each email from the batch result
+      const batchData = batchResult?.data || [];
+      const recordPromises = batch.map(async (entry, idx) => {
+        const resendId = batchData[idx]?.id;
+
+        // Record in digest_emails
+        await recordEmailSent(
+          supabaseAdmin,
+          entry.digestId,
+          entry.userId,
+          undefined,
+          resendId
+        );
+
+        // Record in email_logs for backward compatibility
+        await supabaseAdmin.from('email_logs').insert({
+          user_id: entry.userId,
+          email_type: emailType,
+          subject: entry.subject,
+          episodes_included: entry.episodeIds,
+          resend_id: resendId,
+        });
+
+        // Update user's last_email_sent
+        await supabaseAdmin
+          .from('users')
+          .update({ last_email_sent: new Date().toISOString() })
+          .eq('id', entry.userId);
+
+        results.emailsSent++;
+
+        // Track in PostHog
+        getPostHogServer()?.capture({
+          distinctId: entry.userId,
+          event: 'email_sent',
+          properties: {
+            email_type: emailType,
+            resend_id: resendId,
+            source_count: allSourceIds.length,
+          },
+        });
+      });
+
+      await Promise.allSettled(recordPromises);
+    } catch (err) {
+      results.errors.push(`Batch send exception: ${err}`);
     }
   }
 
   return results;
-}
-
-async function processUser(
-  user: Record<string, unknown>,
-  allSourceIds: string[],
-  today: Date,
-  dateStr: string,
-): Promise<ProcessUserResult> {
-  const result: ProcessUserResult = {
-    sent: false,
-    cacheHit: false,
-    cacheMiss: false,
-    skipped: false,
-    alreadySent: false,
-  };
-
-  const emailType = 'daily';
-
-  try {
-    // All users receive the same digest with all sources
-    const userSourceIds = allSourceIds;
-
-    // Get cached digest
-    const cacheResult = await getCachedDigest(
-      supabaseAdmin,
-      userSourceIds,
-      emailType,
-      today
-    );
-
-    if (!cacheResult.found) {
-      if (cacheResult.reason === 'no_content') {
-        result.skipped = true;
-        return result;
-      }
-
-      result.cacheMiss = true;
-      result.error = `Cache miss for user ${user.id} (${cacheResult.reason}): ${generateCombinationKey(allSourceIds)}`;
-      return result;
-    }
-
-    result.cacheHit = true;
-    const digest = cacheResult.digest!;
-
-    // Check if already sent to this user
-    const alreadySentToUser = await wasEmailSent(
-      supabaseAdmin,
-      digest.id,
-      user.id as string
-    );
-
-    if (alreadySentToUser) {
-      result.alreadySent = true;
-      return result;
-    }
-
-    // Generate HMAC-based unsubscribe URL (never expires)
-    const unsubscribeUrl = generateUnsubscribeUrl(user.id as string);
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
-    // Inject URLs into cached HTML (homepage for manage link, unsubscribe for opt-out)
-    let emailHtml = injectMagicLinkToHtml(digest.html_template, baseUrl, unsubscribeUrl);
-
-    // Show "Buy Me a Coffee" block: only on specific weekdays, for users signed up 7+ days ago
-    const createdAt = new Date(user.created_at as string);
-    const daysSinceSignup = (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (shouldShowBmc(daysSinceSignup, today)) {
-      emailHtml = injectBuyMeACoffee(emailHtml, dateStr);
-    }
-
-    const emailSubject = `今日懶懶財經速報 - ${dateStr}`;
-
-    // Send email
-    const { data: emailResult, error: emailError } = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-      to: user.email as string,
-      subject: emailSubject,
-      html: emailHtml,
-      headers: {
-        'List-Unsubscribe': `<${unsubscribeUrl}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      },
-    });
-
-    if (emailError) {
-      result.error = `Failed to send email to ${user.email}: ${emailError.message}`;
-      return result;
-    }
-
-    // Record email sent
-    await recordEmailSent(
-      supabaseAdmin,
-      digest.id,
-      user.id as string,
-      undefined,
-      emailResult?.id
-    );
-
-    // Update email_logs for backward compatibility
-    await supabaseAdmin.from('email_logs').insert({
-      user_id: user.id,
-      email_type: emailType,
-      subject: emailSubject,
-      episodes_included: digest.episode_ids,
-      resend_id: emailResult?.id,
-    });
-
-    // Update user's last_email_sent
-    await supabaseAdmin
-      .from('users')
-      .update({ last_email_sent: new Date().toISOString() })
-      .eq('id', user.id);
-
-    result.sent = true;
-
-    // Track email sent in PostHog
-    const { getPostHogServer } = await import('../posthog-server');
-    getPostHogServer()?.capture({
-      distinctId: user.id as string,
-      event: 'email_sent',
-      properties: {
-        email_type: emailType,
-        resend_id: emailResult?.id,
-        source_count: userSourceIds.length,
-      },
-    });
-
-  } catch (emailError) {
-    result.error = `Error sending email to ${user.email}: ${emailError}`;
-  }
-
-  return result;
 }

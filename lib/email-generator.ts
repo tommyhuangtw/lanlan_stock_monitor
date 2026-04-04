@@ -320,9 +320,18 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
 
   // Footer
   const footer = `<div style="padding:24px 16px;background:#f8f9fa;border-radius:0 0 12px 12px;">
-    <div style="text-align:center;margin-bottom:20px;">
-      <p style="font-size:14px;color:#334155;margin:0 0 10px;">覺得實用嗎？分享給也在關注投資理財的朋友 👇</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;text-align:center;">
+      <p style="font-size:14px;color:#334155;margin:0 0 12px;">覺得實用嗎？分享給也在關注投資理財的朋友 👇</p>
       <a href="${appUrl}" target="_blank" style="display:inline-block;padding:10px 28px;background:#334155;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">📮 邀請朋友訂閱</a>
+      <div style="border-top:1px dashed #cbd5e1;margin:16px 0 12px;"></div>
+      <div style="margin-bottom:8px;"><img src="${appUrl}/ailanbao-logo.png" width="36" height="36" alt="AI懶人報" style="border-radius:50%;display:inline-block;" /></div>
+      <p style="margin:0 0 8px;font-size:12px;color:#64748b;">追蹤 AI懶人報</p>
+      <div>
+        <a href="https://portaly.cc/ailrb" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px 6px;text-align:center;"><img src="${appUrl}/platforms/portaly.png" width="28" height="28" alt="Portaly" style="display:block;margin:0 auto 2px;border-radius:6px;" /><span style="font-size:10px;color:#64748b;">Portaly</span></a>
+        <a href="https://www.threads.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px 6px;text-align:center;"><img src="${appUrl}/platforms/threads.png" width="28" height="28" alt="Threads" style="display:block;margin:0 auto 2px;border-radius:6px;" /><span style="font-size:10px;color:#64748b;">Threads</span></a>
+        <a href="https://www.instagram.com/ai.lanrenbao/" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px 6px;text-align:center;"><img src="${appUrl}/platforms/instagram.png" width="28" height="28" alt="Instagram" style="display:block;margin:0 auto 2px;border-radius:6px;" /><span style="font-size:10px;color:#64748b;">IG</span></a>
+        <a href="https://www.youtube.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px 6px;text-align:center;"><img src="${appUrl}/platforms/youtube.png" width="28" height="28" alt="YouTube" style="display:block;margin:0 auto 2px;border-radius:6px;" /><span style="font-size:10px;color:#64748b;">YouTube</span></a>
+      </div>
     </div>
     <div style="background:#fff;border:2px solid #f59e0b;border-radius:10px;padding:16px;margin-bottom:14px;">
       <p style="font-size:13px;color:#92400e;margin:0 0 10px;font-weight:700;">⚠️ 重要聲明</p>

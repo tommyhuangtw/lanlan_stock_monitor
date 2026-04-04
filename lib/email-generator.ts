@@ -327,11 +327,11 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
       <div style="margin-bottom:8px;"><img src="${appUrl}/ailanbao-logo.png" width="36" height="36" alt="AI懶人報" style="border-radius:50%;display:inline-block;" /></div>
       <p style="margin:0 0 8px;font-size:12px;color:#64748b;">追蹤 AI懶人報</p>
       <div>
-        <a href="https://portaly.cc/ailrb" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-portaly.png" width="32" height="32" alt="Portaly" style="display:block;border-radius:50%;" /></a>
-        <a href="https://www.threads.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-threads.png" width="32" height="32" alt="Threads" style="display:block;border-radius:50%;" /></a>
-        <a href="https://www.instagram.com/ai.lanrenbao/" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-instagram.png" width="32" height="32" alt="Instagram" style="display:block;border-radius:50%;" /></a>
-        <a href="https://www.facebook.com/profile.php?id=61576894761366" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-facebook.png" width="32" height="32" alt="Facebook" style="display:block;border-radius:50%;" /></a>
-        <a href="https://www.youtube.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-youtube.png" width="32" height="32" alt="YouTube" style="display:block;border-radius:50%;" /></a>
+        <a href="https://portaly.cc/ailrb" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-portaly.png" width="32" height="32" alt="Portaly" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>
+        <a href="https://www.threads.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-threads.png" width="32" height="32" alt="Threads" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>
+        <a href="https://www.instagram.com/ai.lanrenbao/" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-instagram.png" width="32" height="32" alt="Instagram" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>
+        <a href="https://www.facebook.com/profile.php?id=61576894761366" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-facebook.png" width="32" height="32" alt="Facebook" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>
+        <a href="https://www.youtube.com/@ai.lanrenbao" target="_blank" style="display:inline-block;text-decoration:none;margin:0 6px;"><img src="${appUrl}/platforms/social-youtube.png" width="32" height="32" alt="YouTube" style="display:block;border-radius:50%;border:1.5px solid #94a3b8;" /></a>
       </div>
     </div>
     <div style="background:#fff;border:2px solid #f59e0b;border-radius:10px;padding:16px;margin-bottom:14px;">

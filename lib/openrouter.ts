@@ -199,10 +199,9 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 - KOL 提到基本面惡化的個股
 - 同上所有欄位
 
-### 3. KOL 提到的操作（僅供記錄）
-- 記錄 KOL 自己的操作：已買進、已賣出、已加碼、已減碼、已停損、已停利
-- 如果 KOL 只是表達看法而非實際操作，action 填「看好」「看空」「觀察」
-- 絕對不要用命令式詞彙（買進/賣出/加碼/減碼），一律改為「已買進/已賣出」或「看好/看空」
+### 3. KOL 表達的觀點（僅供記錄）
+- 根據 KOL 對標的的態度，action 填「看好」「看空」「觀察」「無」
+- 不要記錄具體操作（買進/賣出/加碼/減碼等），只記錄觀點傾向
 - 請在 signal 中用 action 欄位記錄
 
 ### 4. 值得關注的產業趨勢或總經觀察（Monitor）
@@ -255,7 +254,7 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 - type 使用英文（bullish/bearish/monitor）
 - timeHorizon 使用英文（short/medium/long）
 - overall_sentiment 使用英文（bullish/moderately_bullish/neutral/moderately_bearish/bearish）
-- action 欄位用繁體中文（已買進/已賣出/已加碼/已減碼/已停損/已停利/看好/看空/觀察/無）
+- action 欄位用繁體中文（看好/看空/觀察/無）
 
 ⚠️ 輸出規則：
 - 直接輸出純 JSON，不要用 \`\`\`json 包裹

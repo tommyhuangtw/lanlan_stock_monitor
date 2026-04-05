@@ -8,6 +8,7 @@
 | `$pageleave` | 前端 autocapture | 離開頁面 |
 | `$autocapture` | 前端 autocapture | 點擊按鈕等互動（含 element text） |
 | `user_signed_up` | `/api/signup` | 用戶完成註冊 |
+| `user_resubscribed` | `/api/signup` | 已退訂用戶重新訂閱（property: `method` = signup_form） |
 | `email_sent` | signup + daily pipeline | 寄出 email（property: `email_type` = welcome/daily） |
 | `email_delivered` | Resend webhook | Email 成功送達 |
 | `email_opened` | Resend webhook | 用戶開信 |

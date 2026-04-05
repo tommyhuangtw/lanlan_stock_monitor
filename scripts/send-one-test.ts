@@ -8,7 +8,7 @@ import { injectMagicLinkToHtml } from '../lib/email-generator';
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
-const TARGET_EMAIL = 'tommyhuang511@gmail.com';
+const TARGET_EMAIL = 'tommyhuang0511@gmail.com';
 
 async function main() {
   const resend = new Resend(process.env.RESEND_API_KEY);

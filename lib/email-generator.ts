@@ -43,6 +43,20 @@ function findPlatformLinks(podcastName: string) {
   return null;
 }
 
+// Convert action tags to opinion-only tags (no explicit trading signals)
+const ACTION_TO_OPINION: Record<string, string> = {
+  '已買進': '看好', '已加碼': '看好',
+  '已賣出': '看空', '已減碼': '看空', '已停損': '看空',
+  '已停利': '觀察',
+  '看好': '看好', '看空': '看空', '觀察': '觀察',
+};
+
+function toOpinionTag(action: string): string | null {
+  const opinion = ACTION_TO_OPINION[action] ?? action;
+  if (opinion === '無') return null;
+  return `表達${opinion}`;
+}
+
 function escHtml(str: string | undefined | null): string {
   if (!str) return '';
   return String(str)
@@ -140,8 +154,10 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         for (const s of sig.sources) {
           sourcesHtml += `<div style="margin:4px 0;padding:6px 10px;background:#f8f9fa;border-radius:6px;font-size:13px;"><strong>${escHtml(s.kol)}</strong>：${escHtml(s.reason)}`;
           if (s.action && s.action !== '無') {
-            const actionText = s.action.startsWith('已') ? s.action : `表達${s.action}`;
-            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
+            const actionText = toOpinionTag(s.action);
+            if (actionText) {
+              sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
+            }
           }
           sourcesHtml += ` ${confidenceBadge(s.confidence)}</div>`;
         }
@@ -161,8 +177,10 @@ export function generateHtmlBlocks(report: ConsolidatedReport): HtmlBlocks {
         for (const s of sig.sources) {
           sourcesHtml += `<div style="margin:4px 0;padding:6px 10px;background:#fdf2f2;border-radius:6px;font-size:13px;"><strong>${escHtml(s.kol)}</strong>：${escHtml(s.reason)}`;
           if (s.action && s.action !== '無') {
-            const actionText = s.action.startsWith('已') ? s.action : `表達${s.action}`;
-            sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
+            const actionText = toOpinionTag(s.action);
+            if (actionText) {
+              sourcesHtml += ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;color:#0369a1;background:#e0f2fe;margin-left:4px;">${escHtml(actionText)}</span>`;
+            }
           }
           sourcesHtml += ` ${confidenceBadge(s.confidence)}</div>`;
         }

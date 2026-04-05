@@ -363,5 +363,8 @@ export async function sendEmails(): Promise<SendEmailsResult> {
     }
   }
 
+  // Flush PostHog events before returning (critical in serverless environments)
+  await getPostHogServer()?.flush();
+
   return results;
 }

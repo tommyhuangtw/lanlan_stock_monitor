@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import posthog from 'posthog-js';
 import { Button } from '@/components/ui/button';
 
 function SignupForm({ id }: { id?: string }) {
@@ -26,6 +27,8 @@ function SignupForm({ id }: { id?: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '註冊失敗');
+      // Link anonymous PostHog ID to Supabase user ID for funnel tracking
+      posthog.identify(data.userId, { email });
       sessionStorage.setItem('signup_email', email);
       router.push('/thank-you');
     } catch (err) {

@@ -71,13 +71,16 @@ function repairJson(jsonStr: string): string {
  * Parse JSON with repair attempt on failure
  */
 function parseJsonSafe(content: string): unknown {
-  // First, try to extract JSON from the response
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  // Strip markdown code fences (```json ... ```)
+  const cleaned = content.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
+
+  // Try to extract JSON from the response
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('No JSON object found in response');
   }
 
-  let jsonStr = jsonMatch[0];
+  const jsonStr = jsonMatch[0];
 
   // Try parsing directly first
   try {
@@ -287,6 +290,13 @@ ${transcript.slice(0, 40000)}`
   const result = parseJsonSafe(content) as AnalysisResult;
   result.podcastName = podcastName || 'Unknown';
 
+  // Ensure required arrays exist (AI may omit them)
+  if (!Array.isArray(result.signals)) result.signals = [];
+  if (!Array.isArray(result.key_insights)) result.key_insights = [];
+  if (!Array.isArray(result.episodeHighlights)) result.episodeHighlights = [];
+  if (!Array.isArray(result.riskAlerts)) result.riskAlerts = [];
+  if (!Array.isArray(result.catalysts)) result.catalysts = [];
+
   return result;
 }
 
@@ -471,6 +481,7 @@ export async function consolidateReports(
 
   const response = await openrouter.chat.completions.create({
     model: PRO_MODEL,
+    max_tokens: 16000,
     temperature: 0.2,
     messages: [
       {
@@ -491,7 +502,14 @@ ${JSON.stringify(inputData, null, 2)}`
   const content = response.choices[0]?.message?.content || '{}';
 
   const rawReport = parseJsonSafe(content) as Record<string, unknown>;
-  return normalizeConsolidatedReport(rawReport, analyses.length);
+  const report = normalizeConsolidatedReport(rawReport, analyses.length);
+
+  console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
+  if (report.episodeSummaries.length === 0 && analyses.length > 0) {
+    console.warn('[consolidateReports] ⚠️ episodeSummaries is empty despite having input analyses!');
+  }
+
+  return report;
 }
 
 /**

@@ -215,6 +215,10 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
       }))
     );
 
+    if (consolidatedReport.episodeSummaries.length === 0) {
+      console.warn(`[generateDigest] ⚠️ Consolidation returned 0 episodeSummaries despite ${analyses.length} input analyses`);
+    }
+
     // Generate quick digest (calls OpenRouter)
     const quickDigestResult = await generateQuickDigest(consolidatedReport);
     quickDigest = quickDigestResult.quickDigest;

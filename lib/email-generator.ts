@@ -520,11 +520,11 @@ export function assembleEmail(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="x-apple-disable-message-reformatting">
-  <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>懶懶財經速報</title>
   <style>
-    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    :root { color-scheme: light; supported-color-schemes: light; }
 
     /* Reset */
     body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
@@ -535,12 +535,6 @@ export function assembleEmail(
       .content-cell { padding: 10px !important; }
     }
 
-    /* Dark mode */
-    @media (prefers-color-scheme: dark) {
-      body { background-color: #121212 !important; }
-      .main-card { background-color: #1c1c1e !important; }
-      .text-dark { color: #eeeeee !important; }
-    }
   </style>
 </head>
 <body style="margin:0; padding:0; background-color:#f4f7f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">

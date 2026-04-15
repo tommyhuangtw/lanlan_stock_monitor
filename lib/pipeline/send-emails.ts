@@ -16,6 +16,11 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Resend Batch API supports up to 100 emails per call
 const BATCH_SIZE = 100;
 
+// Simple email format validator — filters out addresses that Resend will reject
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 // Generate HMAC-based unsubscribe URL (never expires)
 function generateUnsubscribeUrl(userId: string): string {
   const secret = process.env.UNSUBSCRIBE_SECRET || process.env.RESEND_API_KEY || 'fallback-secret';
@@ -245,6 +250,14 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   for (const user of users) {
     results.usersProcessed++;
 
+    const userEmail = ((user.email as string) || '').trim();
+
+    if (!userEmail || !isValidEmail(userEmail)) {
+      results.errors.push(`Skipped invalid email format: ${user.email}`);
+      results.skipped++;
+      continue;
+    }
+
     try {
       // Check if already sent to this user
       const alreadySentToUser = await wasEmailSent(
@@ -273,7 +286,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
 
       preparedEmails.push({
         userId: user.id as string,
-        email: user.email as string,
+        email: userEmail,
         html: emailHtml,
         subject: emailSubject,
         unsubscribeUrl,
@@ -324,7 +337,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
           supabaseAdmin,
           entry.digestId,
           entry.userId,
-          undefined,
+          '',
           resendId
         );
 

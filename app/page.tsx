@@ -17,6 +17,7 @@ function SignupForm({ id }: { id?: string }) {
     e.preventDefault();
     setError('');
     if (!email) { setError('請輸入 Email'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('請輸入有效的 Email 格式'); return; }
     if (!agreed) { setError('請先同意接收電子報及行銷資訊'); return; }
     setLoading(true);
     try {

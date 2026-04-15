@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
   try {
     const { email, marketingConsent } = await request.json();
 
-    // Validate input
-    if (!email || !email.includes('@')) {
+    // Validate input — must be a valid email format (no spaces, has @ and domain with TLD)
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return NextResponse.json(
         { error: '請輸入有效的 Email' },
         { status: 400 }

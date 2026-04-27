@@ -26,10 +26,12 @@ const SENTIMENT_ICON: Record<string, string> = {
 /**
  * LINE Webhook endpoint.
  * Commands:
- * - "groupid" → group ID echo
+ * - "說明" / "help" / "指令" → usage guide
  * - "清單" / "追蹤" → watchlist with entry opportunities
- * - Stock ticker (TSLA, 2330, 台積電) → stock detail
+ * - "kol" → list all available KOLs
  * - "@KOL名稱" → KOL recent opinions
+ * - Stock ticker (TSLA, 2330, 台積電) → stock detail
+ * - "groupid" → group ID echo (admin)
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -59,9 +61,21 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
+    // Command: 說明 / help / 指令
+    if (text === '說明' || text === 'help' || text === '指令') {
+      await replyMessage(token, event.replyToken, [buildHelpMessage()]);
+      continue;
+    }
+
     // Command: 清單 / 追蹤
     if (text === '清單' || text === '追蹤') {
       await replyMessage(token, event.replyToken, await buildWatchlistReply());
+      continue;
+    }
+
+    // Command: KOL list
+    if (text === 'kol') {
+      await replyMessage(token, event.replyToken, await buildKolListReply());
       continue;
     }
 
@@ -95,6 +109,118 @@ async function replyMessage(token: string, replyToken: string, messages: Msg[]) 
     },
     body: JSON.stringify({ replyToken, messages }),
   });
+}
+
+// ============================================================
+// HELP / 說明
+// ============================================================
+
+function buildHelpMessage(): Msg {
+  return {
+    type: 'text',
+    text: [
+      '📋 可用指令：',
+      '',
+      '清單 → 查看入場機會 + 追蹤股票',
+      '說明 → 顯示此說明',
+      '',
+      '🔍 查個股：直接輸入股票代號',
+      '  例：TSLA、2330、台積電',
+      '',
+      '📣 查 KOL：輸入 @KOL名稱',
+      '  例：@股癌、@NaNa',
+      '',
+      '💡 輸入「KOL」查看所有 KOL 列表',
+      '💡 輸入「清單」查看所有追蹤股票',
+    ].join('\n'),
+  };
+}
+
+// ============================================================
+// KOL LIST
+// ============================================================
+
+async function buildKolListReply(): Promise<Msg[]> {
+  const { data: sources } = await supabaseAdmin
+    .from('sources')
+    .select('name, type')
+    .eq('is_active', true)
+    .order('type')
+    .order('name');
+
+  if (!sources || sources.length === 0) {
+    return [{ type: 'text', text: '目前沒有 KOL 資料。' }];
+  }
+
+  const podcasts = sources.filter((s: { type: string }) => s.type === 'podcast');
+  const youtubes = sources.filter((s: { type: string }) => s.type === 'youtube');
+
+  const body: Msg[] = [];
+
+  const addGroup = (icon: string, label: string, items: Array<{ name: string }>) => {
+    if (items.length === 0) return;
+    body.push({
+      type: 'text', text: `${icon} ${label}`, size: 'sm', weight: 'bold', color: '#333333',
+      margin: body.length > 0 ? 'lg' : 'none',
+    });
+    for (const item of items) {
+      // Extract a short keyword from the full name for the query hint
+      const shortName = extractKolKeyword(item.name);
+      body.push({
+        type: 'text',
+        text: `• ${item.name}\n  → 輸入 @${shortName}`,
+        size: 'xs', color: '#555555', wrap: true, margin: 'sm',
+      });
+    }
+  };
+
+  addGroup('🎙️', 'Podcast', podcasts);
+  addGroup('📺', 'YouTube', youtubes);
+
+  return [{
+    type: 'flex',
+    altText: `📣 KOL 列表（${sources.length} 位）`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#4A148C', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '📣 KOL 列表', size: 'lg', weight: 'bold', color: '#ffffff' },
+          { type: 'text', text: `共 ${sources.length} 位 KOL`, size: 'xs', color: '#ffffffcc' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none',
+        contents: body,
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '10px',
+        contents: [
+          { type: 'text', text: '輸入 @名稱 查看該 KOL 近期觀點', size: 'xxs', color: '#AAAAAA', align: 'center' },
+        ],
+      },
+    },
+  }];
+}
+
+/**
+ * Extract a short, recognizable keyword from a KOL name for the query hint.
+ * e.g. "Gooaye 股癌" → "股癌", "NaNa說美股" → "NaNa", "韭菜畢業班" → "韭菜畢業班"
+ */
+function extractKolKeyword(name: string): string {
+  // Known mappings for cleaner hints
+  const map: Record<string, string> = {
+    'Gooaye 股癌': '股癌',
+    '美股航海王｜指數流': '航海王',
+    '韭菜畢業班': '韭菜畢業班',
+    '美股投資學-財女珍妮': '財女珍妮',
+    '游庭皓的財經皓角': '財經皓角',
+    'Nick 美股咖啡館': 'Nick',
+    'NaNa說美股': 'NaNa',
+    '陽光財經': '陽光財經',
+  };
+  return map[name] || name;
 }
 
 // ============================================================
@@ -560,9 +686,31 @@ async function buildWatchlistReply(): Promise<Msg[]> {
     },
   });
 
-  // Bubble 2: Simplified summary + usage hints
-  const usCount = stocks.filter((s: { market: string }) => s.market === 'US').length;
-  const twCount = stocks.filter((s: { market: string }) => s.market === 'TW').length;
+  // Bubble 2: Full stock list + usage hints
+  const usStocks = stocks.filter((s: { market: string }) => s.market === 'US');
+  const twStocks = stocks.filter((s: { market: string }) => s.market === 'TW');
+
+  // Format stock display: use ticker for US, name(ticker) for TW
+  const formatTicker = (s: { ticker: string; name: string | null; market: string }) => {
+    if (s.market === 'TW' && s.name) return `${s.name}(${s.ticker})`;
+    return s.ticker;
+  };
+  const usTickerList = usStocks.map(formatTicker).join('・');
+  const twTickerList = twStocks.map(formatTicker).join('・');
+
+  const listBody: Msg[] = [];
+  if (usStocks.length > 0) {
+    listBody.push({ type: 'text', text: `🇺🇸 美股（${usStocks.length} 檔）`, size: 'sm', weight: 'bold', color: '#0D47A1' });
+    listBody.push({ type: 'text', text: usTickerList, size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
+  }
+  if (twStocks.length > 0) {
+    listBody.push({ type: 'text', text: `🇹🇼 台股（${twStocks.length} 檔）`, size: 'sm', weight: 'bold', color: '#1B5E20', margin: usStocks.length > 0 ? 'lg' : 'none' });
+    listBody.push({ type: 'text', text: twTickerList, size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
+  }
+  listBody.push({ type: 'separator', margin: 'lg' });
+  listBody.push({ type: 'text', text: '💡 輸入股票代號查詳情', size: 'xs', color: '#999999', margin: 'md' });
+  listBody.push({ type: 'text', text: '💡 輸入 @KOL名稱 查觀點', size: 'xs', color: '#999999', margin: 'xs' });
+  listBody.push({ type: 'text', text: '💡 輸入「說明」查看所有指令', size: 'xs', color: '#999999', margin: 'xs' });
 
   messages.push({
     type: 'flex',
@@ -577,25 +725,8 @@ async function buildWatchlistReply(): Promise<Msg[]> {
         ],
       },
       body: {
-        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'md',
-        contents: [
-          {
-            type: 'box', layout: 'horizontal', contents: [
-              { type: 'text', text: `🇺🇸 美股`, size: 'sm', color: '#0D47A1', weight: 'bold', flex: 3 },
-              { type: 'text', text: `${usCount} 檔`, size: 'sm', color: '#333333', flex: 2, align: 'end' },
-            ],
-          },
-          {
-            type: 'box', layout: 'horizontal', contents: [
-              { type: 'text', text: `🇹🇼 台股`, size: 'sm', color: '#1B5E20', weight: 'bold', flex: 3 },
-              { type: 'text', text: `${twCount} 檔`, size: 'sm', color: '#333333', flex: 2, align: 'end' },
-            ],
-          },
-          { type: 'separator', margin: 'md' },
-          { type: 'text', text: '💡 使用方式', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' },
-          { type: 'text', text: '輸入股票代號查詳情\n例：TSLA、2330、台積電', size: 'xs', color: '#555555', wrap: true, margin: 'sm' },
-          { type: 'text', text: '輸入 @KOL 查觀點\n例：@股癌、@NaNa', size: 'xs', color: '#555555', wrap: true, margin: 'sm' },
-        ],
+        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none',
+        contents: listBody,
       },
     },
   });

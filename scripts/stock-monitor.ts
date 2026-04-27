@@ -26,9 +26,9 @@ async function main() {
   console.log(`Market filter: ${marketFilter || 'all'}`);
   console.log(`Backfill mode: ${shouldBackfill}`);
 
-  // Step 0: Backfill historical prices for new stocks (if needed)
-  if (shouldBackfill) {
-    console.log('\n--- Backfilling historical prices ---');
+  // Step 0: Auto-backfill historical prices for new stocks (no price data yet)
+  {
+    console.log('\n--- Checking for new stocks to backfill ---');
     const { data: newStocks } = await supabaseAdmin
       .from('watchlist_stocks')
       .select('ticker_normalized')
@@ -36,9 +36,9 @@ async function main() {
       .is('last_price_update', null);
 
     if (newStocks && newStocks.length > 0) {
-      console.log(`Backfilling ${newStocks.length} stocks...`);
+      console.log(`Backfilling ${newStocks.length} new stocks (300 days for SMA200)...`);
       for (const stock of newStocks) {
-        const stored = await backfillPrices(stock.ticker_normalized, 60);
+        const stored = await backfillPrices(stock.ticker_normalized, 300);
         console.log(`  ${stock.ticker_normalized}: ${stored} days backfilled`);
       }
     } else {

@@ -29,7 +29,8 @@ export type AlertType =
   | 'rsi_oversold'
   | 'consolidation'
   | 'near_kol_support'
-  | 'sma_support';
+  | 'sma_support'
+  | 'volume_surge';
 
 export interface EntrySignal {
   alertType: AlertType;
@@ -210,6 +211,18 @@ async function checkStock(stock: WatchlistStock): Promise<EntrySignal[]> {
       alertType: 'sma_support',
       triggerPrice: snapshot.currentPrice,
       triggerReason: `股價回測 SMA(50) ${snapshot.sma50?.toFixed(2)}，中線上升趨勢中的拉回`,
+      technicalSnapshot: snapshot,
+      kolContext,
+    });
+  }
+
+  // Rule 6: Volume surge (2x 20-day average)
+  if (snapshot.avgVolume20d && snapshot.avgVolume20d > 0 && snapshot.volume >= snapshot.avgVolume20d * 2) {
+    const ratio = (snapshot.volume / snapshot.avgVolume20d).toFixed(1);
+    signals.push({
+      alertType: 'volume_surge',
+      triggerPrice: snapshot.currentPrice,
+      triggerReason: `成交量異常放大（${ratio} 倍於 20 日均量），留意是否有重大消息`,
       technicalSnapshot: snapshot,
       kolContext,
     });

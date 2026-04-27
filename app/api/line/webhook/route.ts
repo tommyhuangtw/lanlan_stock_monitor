@@ -17,6 +17,7 @@ const ALERT_TYPE_CONFIG: Record<string, { label: string; detail: string; score: 
   significant_drop_5pct: { label: '回檔 5%', detail: '從近20日高點回檔逾5%', score: 10 },
   consolidation: { label: '盤整待突破', detail: '價格區間收窄，留意突破方向', score: 10 },
   ai_entry_signal: { label: 'AI 訊號', detail: 'AI 偵測到入場機會', score: 15 },
+  volume_surge: { label: '量能異常', detail: '成交量異常放大（≥2倍均量）', score: 10 },
 };
 
 const SENTIMENT_ICON: Record<string, string> = {

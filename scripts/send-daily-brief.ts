@@ -29,6 +29,7 @@ const SIGNAL_WEIGHTS: Record<string, number> = {
   sma_support: 15,
   consolidation: 5,
   ai_entry_signal: 15,
+  volume_surge: 10,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

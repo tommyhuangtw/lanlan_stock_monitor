@@ -411,7 +411,7 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       const dateStr = formatShortDate(k.date);
       body.push({
         type: 'text',
-        text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason.slice(0, 50)}`,
+        text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason}`,
         size: 'xs', color: '#555555', wrap: true, margin: 'sm',
       });
     }
@@ -523,7 +523,7 @@ async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): 
     const dateStr = formatShortDate(k.date);
     body.push({
       type: 'text',
-      text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason.slice(0, 50)}`,
+      text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason}`,
       size: 'xs', color: '#555555', wrap: true, margin: 'sm',
     });
   }
@@ -588,7 +588,7 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
       if (!sig.ticker || seenTickers.has(`${sig.ticker}|${sig.type}`)) continue;
       seenTickers.add(`${sig.ticker}|${sig.type}`);
 
-      const item = { ticker: sig.ticker, sentiment: sig.type, reason: (sig.reason || '').slice(0, 50), date };
+      const item = { ticker: sig.ticker, sentiment: sig.type, reason: sig.reason || '', date };
       if (sig.type === 'bullish') bullish.push(item);
       else if (sig.type === 'bearish') bearish.push(item);
       else monitor.push(item);

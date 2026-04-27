@@ -250,6 +250,23 @@ function formatShortDate(dateStr: string): string {
   return ` ${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** Get ISO date string for 2 months ago */
+function twoMonthsAgoISO(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 2);
+  return d.toISOString();
+}
+
+/** Check if a date string is within the last 2 months */
+function isWithinTwoMonths(dateStr: string): boolean {
+  if (!dateStr || dateStr === 'unknown') return false;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 2);
+  return d >= cutoff;
+}
+
 // Common English aliases for stocks (uppercase keys)
 const TICKER_ALIASES: Record<string, string> = {
   'TSMC': '2330.TW',
@@ -372,8 +389,9 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     }
   }
 
-  // KOL opinions
-  const kolSources = (stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>;
+  // KOL opinions (filter out opinions older than 2 months)
+  const kolSources = ((stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>)
+    .filter(k => isWithinTwoMonths(k.date || ''));
   if (kolSources.length > 0) {
     body.push({ type: 'separator', margin: 'lg' });
     body.push({ type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' });
@@ -446,6 +464,7 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
   const { data: analyses } = await supabaseAdmin
     .from('analyses')
     .select('full_analysis, created_at')
+    .gte('created_at', twoMonthsAgoISO())
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -544,6 +563,7 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
   const { data: analyses } = await supabaseAdmin
     .from('analyses')
     .select('full_analysis, created_at')
+    .gte('created_at', twoMonthsAgoISO())
     .order('created_at', { ascending: false })
     .limit(200);
 

@@ -16,9 +16,10 @@ interface LineMessage {
 }
 
 /**
- * Send a LINE push message to a specific user.
+ * Send a LINE push message to a user or group.
+ * @param to - User ID (U...) or Group ID (C...)
  */
-async function sendLinePushMessage(userId: string, messages: LineMessage[]): Promise<boolean> {
+async function sendLinePushMessage(to: string, messages: LineMessage[]): Promise<boolean> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) {
     log('warn', '[LINE] LINE_CHANNEL_ACCESS_TOKEN not configured');
@@ -33,7 +34,7 @@ async function sendLinePushMessage(userId: string, messages: LineMessage[]): Pro
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
-        to: userId,
+        to,
         messages,
       }),
     });
@@ -112,9 +113,10 @@ function formatAlertMessage(result: DetectionResult): string {
  * Returns the number of messages sent.
  */
 export async function sendLineAlerts(detectionResults: DetectionResult[]): Promise<number> {
-  const userId = process.env.LINE_USER_ID;
-  if (!userId) {
-    log('warn', '[LINE] LINE_USER_ID not configured, skipping LINE notifications');
+  // Prefer group, fall back to individual user
+  const target = process.env.LINE_GROUP_ID || process.env.LINE_USER_ID;
+  if (!target) {
+    log('warn', '[LINE] LINE_GROUP_ID and LINE_USER_ID not configured, skipping LINE notifications');
     return 0;
   }
 
@@ -128,7 +130,7 @@ export async function sendLineAlerts(detectionResults: DetectionResult[]): Promi
   for (const result of detectionResults) {
     const message = formatAlertMessage(result);
 
-    const success = await sendLinePushMessage(userId, [
+    const success = await sendLinePushMessage(target, [
       { type: 'text', text: message },
     ]);
 

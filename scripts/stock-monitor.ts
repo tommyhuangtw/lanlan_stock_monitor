@@ -11,6 +11,7 @@ import { fetchAndStorePrices, backfillPrices } from '../lib/stock-data';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
 import { sendLineAlerts } from '../lib/notifications/line';
 import { sendEmailAlert } from '../lib/notifications/email-alert';
+import { generateAndSaveAliases } from '../lib/generate-aliases';
 import { supabaseAdmin } from '../lib/supabase';
 import { log } from '../lib/logger';
 
@@ -43,6 +44,26 @@ async function main() {
       }
     } else {
       console.log('No new stocks to backfill.');
+    }
+  }
+
+  // Step 0b: Auto-generate aliases for stocks missing them
+  {
+    console.log('\n--- Checking for stocks without aliases ---');
+    const { data: noAliasStocks } = await supabaseAdmin
+      .from('watchlist_stocks')
+      .select('id, ticker_normalized, name')
+      .eq('status', 'active')
+      .or('aliases.is.null,aliases.eq.{}');
+
+    if (noAliasStocks && noAliasStocks.length > 0) {
+      console.log(`Generating aliases for ${noAliasStocks.length} stocks...`);
+      for (const stock of noAliasStocks) {
+        const aliases = await generateAndSaveAliases(stock.id, stock.ticker_normalized, stock.name);
+        console.log(`  ${stock.ticker_normalized}: [${aliases.join(', ')}]`);
+      }
+    } else {
+      console.log('All stocks have aliases.');
     }
   }
 

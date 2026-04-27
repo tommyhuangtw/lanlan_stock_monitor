@@ -332,7 +332,7 @@ function normalizeChineseChars(text: string): string {
 }
 
 function matchesStock(
-  s: { ticker: string; ticker_normalized: string; name: string | null },
+  s: { ticker: string; ticker_normalized: string; name: string | null; aliases?: string[] | null },
   query: string,
   qUpper: string,
 ): boolean {
@@ -350,7 +350,12 @@ function matchesStock(
   }
   // Ticker contains query (e.g. query "台積電" matches ticker "台積電 (2330)")
   if (normalizeChineseChars(s.ticker).toLowerCase().includes(normalizeChineseChars(query).toLowerCase())) return true;
-  // Alias match (e.g. "TSMC" → "2330.TW")
+  // DB aliases match (AI-generated, e.g. ["Google", "谷歌", "Alphabet"])
+  if (s.aliases?.length) {
+    const qLower = query.toLowerCase();
+    if (s.aliases.some(a => a.toLowerCase() === qLower)) return true;
+  }
+  // Hardcoded alias fallback (e.g. "TSMC" → "2330.TW")
   const aliasTarget = TICKER_ALIASES[qUpper];
   if (aliasTarget && s.ticker_normalized === aliasTarget) return true;
   return false;
@@ -365,7 +370,7 @@ async function buildStockReply(query: string): Promise<Msg[] | null> {
     .select('*')
     .eq('status', 'active');
 
-  const stock = (stocks || []).find((s: { ticker: string; ticker_normalized: string; name: string | null }) =>
+  const stock = (stocks || []).find((s: { ticker: string; ticker_normalized: string; name: string | null; aliases?: string[] | null }) =>
     matchesStock(s, query, q)
   );
 

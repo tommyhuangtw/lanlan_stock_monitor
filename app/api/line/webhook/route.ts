@@ -371,7 +371,7 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     body.push({ type: 'separator', margin: 'lg' });
 
     // RSI heat bar
-    const latestSnapshot = alerts[0].technical_snapshot as { rsi14?: number } | null;
+    const latestSnapshot = alerts[0].technical_snapshot as { rsi14?: number; sma50?: number; sma200?: number; currentPrice?: number } | null;
     const rsi = latestSnapshot?.rsi14;
     if (rsi !== undefined && rsi !== null) {
       const rsiColor = rsi < 30 ? '#2196F3' : rsi < 40 ? '#64B5F6' : rsi < 60 ? '#9E9E9E' : rsi < 70 ? '#FF9800' : '#F44336';
@@ -389,6 +389,37 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
           { type: 'box', layout: 'vertical', contents: [], width: `${Math.min(rsi, 100)}%`, height: '4px', backgroundColor: rsiColor, cornerRadius: '2px' },
         ],
       });
+    }
+
+    // SMA reference prices
+    const sma50 = latestSnapshot?.sma50;
+    const sma200 = latestSnapshot?.sma200;
+    if (sma50 || sma200) {
+      const price = stock.current_price || latestSnapshot?.currentPrice || 0;
+      const smaRows: Msg[] = [];
+      if (sma50) {
+        const diff50 = price > 0 ? ((price - sma50) / sma50 * 100) : 0;
+        const sign50 = diff50 >= 0 ? '+' : '';
+        const color50 = diff50 >= 0 ? '#1B5E20' : '#B71C1C';
+        smaRows.push({
+          type: 'box', layout: 'horizontal', contents: [
+            { type: 'text', text: '50日均線', size: 'xs', color: '#999999', flex: 3 },
+            { type: 'text', text: `${currency}${sma50.toFixed(2)} (${sign50}${diff50.toFixed(1)}%)`, size: 'xs', color: color50, flex: 4, align: 'end' },
+          ],
+        });
+      }
+      if (sma200) {
+        const diff200 = price > 0 ? ((price - sma200) / sma200 * 100) : 0;
+        const sign200 = diff200 >= 0 ? '+' : '';
+        const color200 = diff200 >= 0 ? '#1B5E20' : '#B71C1C';
+        smaRows.push({
+          type: 'box', layout: 'horizontal', margin: 'xs', contents: [
+            { type: 'text', text: '200日均線', size: 'xs', color: '#999999', flex: 3 },
+            { type: 'text', text: `${currency}${sma200.toFixed(2)} (${sign200}${diff200.toFixed(1)}%)`, size: 'xs', color: color200, flex: 4, align: 'end' },
+          ],
+        });
+      }
+      body.push({ type: 'box', layout: 'vertical', margin: 'md', contents: smaRows });
     }
 
     // Alert details with explanation

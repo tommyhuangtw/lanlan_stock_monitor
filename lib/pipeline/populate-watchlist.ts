@@ -10,12 +10,14 @@
 import { supabaseAdmin } from '../supabase';
 import { normalizeTicker, parsePriceLevels } from '../ticker-utils';
 import { log } from '../logger';
+import type { NewWatchlistStock } from '../notifications/line';
 
 export interface PopulateWatchlistResult {
   newStocks: number;
   updatedStocks: number;
   skipped: number;
   errors: string[];
+  newStockDetails: NewWatchlistStock[];
 }
 
 interface KolSource {
@@ -39,6 +41,7 @@ export async function populateWatchlist(): Promise<PopulateWatchlistResult> {
     updatedStocks: 0,
     skipped: 0,
     errors: [],
+    newStockDetails: [],
   };
 
   const today = new Date();
@@ -277,5 +280,12 @@ async function upsertWatchlistStock(
 
     if (error) throw error;
     results.newStocks++;
+    results.newStockDetails.push({
+      ticker: params.ticker,
+      market: params.market,
+      name: params.name,
+      addedBy: 'pipeline',
+      kolSources: params.kolSources.map(k => ({ kol: k.kol, reason: k.reason })),
+    });
   }
 }

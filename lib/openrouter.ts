@@ -279,12 +279,29 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 ⚠️ 輸出規則：
 - 直接輸出純 JSON，不要用 \`\`\`json 包裹
 - 不要在 JSON 前後加任何說明文字
-- 確保 JSON 完整且可被解析`;
+- 確保 JSON 完整且可被解析
+- ⚠️ 必須包含 sectorThemes 欄位（即使為空陣列）
+
+## JSON 結構範例：
+{
+  "signals": [
+    {"ticker": "NVDA", "type": "bullish", "action": "看好", "reason": "...", "confidence": "high", "timeHorizon": "long", "catalyst": "", "priceLevel": ""}
+  ],
+  "key_insights": ["..."],
+  "episodeHighlights": ["AI 基建支出看好", "費半創新高", "CPU 需求上升"],
+  "overall_sentiment": "moderately_bullish",
+  "riskAlerts": ["..."],
+  "catalysts": [{"date": "2026-05", "event": "...", "tickers": ["NVDA"]}],
+  "sectorThemes": [
+    {"theme": "光通訊", "sentiment": "bullish", "reason": "KOL 看好光通訊模組需求成長", "specificStocks": ["聯亞 (3081)", "COHR"]},
+    {"theme": "CPU", "sentiment": "bullish", "reason": "代理式AI推升CPU需求", "specificStocks": ["INTC", "AMD"]}
+  ]
+}`;
 
 export async function analyzeTranscript(transcript: string, episodeTitle: string, podcastName?: string): Promise<AnalysisResult> {
   const response = await openrouter.chat.completions.create({
     model: PRO_MODEL,
-    max_tokens: 6000,
+    max_tokens: 7000,
     temperature: 0.3,
     messages: [
       {

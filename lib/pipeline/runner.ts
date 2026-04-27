@@ -6,6 +6,7 @@ import { populateWatchlist, PopulateWatchlistResult } from './populate-watchlist
 import { expandSectors, ExpandSectorsResult } from './expand-sectors';
 import { generateDigest, GenerateDigestResult } from './generate-digest';
 import { sendEmails, SendEmailsResult } from './send-emails';
+import { sendNewStockAlerts } from '../notifications/line';
 
 export interface PipelineResult {
   startedAt: string;
@@ -109,6 +110,20 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
   } catch (error) {
     console.error(`  Sector expansion failed (non-blocking): ${error}`);
     // Non-blocking: don't push to allErrors
+  }
+
+  // === Notify new watchlist stocks via LINE ===
+  const allNewStocks = [
+    ...(steps.watchlist?.newStockDetails || []),
+    ...(steps.sectorExpansion?.newStockDetails || []),
+  ];
+  if (allNewStocks.length > 0) {
+    console.log(`\n  Sending LINE notifications for ${allNewStocks.length} new watchlist stocks...`);
+    try {
+      await sendNewStockAlerts(allNewStocks);
+    } catch (error) {
+      console.error(`  New stock LINE notification failed (non-blocking): ${error}`);
+    }
   }
 
   // === STEP 5/8: Generate daily digest ===

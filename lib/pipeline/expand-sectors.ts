@@ -12,15 +12,36 @@ import { supabaseAdmin } from '../supabase';
 import { openrouter, PRO_MODEL, SectorTheme } from '../openrouter';
 import { normalizeTicker, isAllowedTicker } from '../ticker-utils';
 import { log } from '../logger';
+import type { NewWatchlistStock } from '../notifications/line';
 
 const PERPLEXITY_MODEL = 'perplexity/sonar-pro-search';
 const EXPANSION_COOLDOWN_DAYS = 7;
+
+/**
+ * Sector theme keywords for backup extraction from signals context.
+ * Maps keywords found in signal context to canonical theme names.
+ */
+const SECTOR_KEYWORDS: Array<{ keywords: string[]; theme: string }> = [
+  { keywords: ['光通訊', '光通', '矽光子', '光纖', '光模組', 'InP', '光收發'], theme: '光通訊' },
+  { keywords: ['CPU', '處理器', '伺服器晶片', 'x86'], theme: 'CPU' },
+  { keywords: ['AI 伺服器', 'AI伺服器', 'AI server', '算力', 'AI 基建', 'AI基建', 'HPC'], theme: 'AI 伺服器' },
+  { keywords: ['液冷', '散熱', '冷卻', 'cooling'], theme: '散熱/液冷' },
+  { keywords: ['電動車', 'EV', '新能源車', '電池'], theme: '電動車' },
+  { keywords: ['ABF', '載板', 'substrate', 'IC載板'], theme: 'ABF載板' },
+  { keywords: ['CoWoS', '先進封裝', '封裝'], theme: '先進封裝' },
+  { keywords: ['ASIC', '客製化晶片', 'TPU'], theme: 'ASIC/客製化晶片' },
+  { keywords: ['機器人', 'robot', 'Optimus', '人形機器人'], theme: '機器人' },
+  { keywords: ['能源', '石油', '天然氣', '油價', '原油'], theme: '能源' },
+  { keywords: ['網路安全', '資安', 'cybersecurity'], theme: '資安' },
+  { keywords: ['記憶體', 'HBM', 'DRAM', 'NAND'], theme: '記憶體/HBM' },
+];
 
 export interface ExpandSectorsResult {
   themesProcessed: number;
   themesSkipped: number;
   stocksAdded: number;
   errors: string[];
+  newStockDetails: NewWatchlistStock[];
 }
 
 /**
@@ -32,6 +53,7 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
     themesSkipped: 0,
     stocksAdded: 0,
     errors: [],
+    newStockDetails: [],
   };
 
   // Get today's analyses that have sectorThemes
@@ -54,16 +76,26 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
   for (const analysis of analyses) {
     const fullAnalysis = analysis.full_analysis as {
       sectorThemes?: SectorTheme[];
+      signals?: Array<{ type: string; reason: string; ticker: string }>;
       podcastName?: string;
     } | null;
 
-    if (!fullAnalysis?.sectorThemes) continue;
+    if (!fullAnalysis) continue;
 
     const kol = fullAnalysis.podcastName || 'Unknown';
-    for (const theme of fullAnalysis.sectorThemes) {
-      if (theme.sentiment === 'bullish') {
-        allThemes.push({ ...theme, kol });
+
+    // Primary: use sectorThemes if available
+    if (fullAnalysis.sectorThemes && fullAnalysis.sectorThemes.length > 0) {
+      for (const theme of fullAnalysis.sectorThemes) {
+        if (theme.sentiment === 'bullish') {
+          allThemes.push({ ...theme, kol });
+        }
       }
+    }
+    // Backup: extract themes from bullish signals context
+    else if (fullAnalysis.signals) {
+      const extracted = extractThemesFromSignals(fullAnalysis.signals, kol);
+      allThemes.push(...extracted);
     }
   }
 
@@ -161,6 +193,14 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
 
           if (!insertError) {
             results.stocksAdded++;
+            results.newStockDetails.push({
+              ticker: stock.ticker,
+              market: normalized.market,
+              name: stock.name || normalized.name || null,
+              addedBy: 'sector_expansion',
+              kolSources: [{ kol: primaryTheme.kol, reason: stock.reason }],
+              sectorTheme: primaryTheme.theme,
+            });
           }
         } catch (err) {
           results.errors.push(`Failed to add ${stock.ticker}: ${err}`);
@@ -177,6 +217,52 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
   }
 
   log('info', `[expandSectors] Done: ${results.themesProcessed} themes processed, ${results.stocksAdded} stocks added`);
+  return results;
+}
+
+/**
+ * Backup extraction: detect sector themes from signal contexts using keyword matching.
+ */
+function extractThemesFromSignals(
+  signals: Array<{ type: string; reason: string; ticker: string }>,
+  kol: string
+): Array<SectorTheme & { kol: string }> {
+  const foundThemes = new Map<string, { reasons: string[]; stocks: string[] }>();
+
+  for (const signal of signals) {
+    if (signal.type !== 'bullish') continue;
+    const context = signal.reason || '';
+
+    for (const { keywords, theme } of SECTOR_KEYWORDS) {
+      const matched = keywords.some(kw => context.includes(kw));
+      if (matched) {
+        if (!foundThemes.has(theme)) {
+          foundThemes.set(theme, { reasons: [], stocks: [] });
+        }
+        const entry = foundThemes.get(theme)!;
+        entry.reasons.push(context.slice(0, 150));
+        if (signal.ticker && !entry.stocks.includes(signal.ticker)) {
+          entry.stocks.push(signal.ticker);
+        }
+      }
+    }
+  }
+
+  const results: Array<SectorTheme & { kol: string }> = [];
+  for (const [theme, data] of foundThemes) {
+    results.push({
+      theme,
+      sentiment: 'bullish',
+      reason: data.reasons[0] || '',
+      specificStocks: data.stocks,
+      kol,
+    });
+  }
+
+  if (results.length > 0) {
+    log('info', `[expandSectors] Backup extraction found ${results.length} themes from signals: ${results.map(r => r.theme).join(', ')}`);
+  }
+
   return results;
 }
 
@@ -267,22 +353,56 @@ ${searchResults}
         },
       ],
       temperature: 0.1,
-      max_tokens: 1000,
+      max_tokens: 3000,
     });
 
     const content = response.choices[0]?.message?.content || '[]';
+    const finishReason = response.choices[0]?.finish_reason;
+
+    if (finishReason === 'length') {
+      log('warn', `[searchSectorStocks] Gemini response truncated for "${theme}"`);
+    }
 
     // Parse JSON (handle common AI output issues)
     let parsed: SectorStock[];
     try {
-      const cleaned = content
+      let cleaned = content
         .replace(/```json\s*/g, '')
         .replace(/```\s*/g, '')
         .trim();
+
+      // Extract JSON array if surrounded by other text
+      const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        cleaned = arrayMatch[0];
+      }
+
+      // If truncated, try to fix incomplete JSON by closing brackets
+      if (finishReason === 'length' && cleaned.endsWith('}')) {
+        cleaned = cleaned + ']';
+      }
+
       parsed = JSON.parse(cleaned);
     } catch {
-      log('warn', `[searchSectorStocks] Failed to parse Gemini response for "${theme}"`);
-      return [];
+      // Try to salvage partial JSON by finding complete objects
+      try {
+        const objects: SectorStock[] = [];
+        const objRegex = /\{\s*"ticker"\s*:\s*"([^"]+)"\s*,\s*"name"\s*:\s*"([^"]+)"\s*,\s*"reason"\s*:\s*"([^"]+)"\s*\}/g;
+        let match;
+        while ((match = objRegex.exec(content)) !== null) {
+          objects.push({ ticker: match[1], name: match[2], reason: match[3] });
+        }
+        if (objects.length > 0) {
+          log('info', `[searchSectorStocks] Salvaged ${objects.length} stocks from partial JSON for "${theme}"`);
+          parsed = objects;
+        } else {
+          log('warn', `[searchSectorStocks] Failed to parse Gemini response for "${theme}": ${content.slice(0, 300)}`);
+          return [];
+        }
+      } catch {
+        log('warn', `[searchSectorStocks] Failed to parse Gemini response for "${theme}": ${content.slice(0, 300)}`);
+        return [];
+      }
     }
 
     if (!Array.isArray(parsed)) return [];

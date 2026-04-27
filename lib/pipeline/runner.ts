@@ -2,6 +2,8 @@ import { fetchFeeds, FetchFeedsResult } from './fetch-feeds';
 import { fetchYoutube, FetchYoutubeResult } from './fetch-youtube';
 import { transcribeAll, TranscribeResult } from './transcribe';
 import { analyzeAll, AnalyzeResult } from './analyze';
+import { populateWatchlist, PopulateWatchlistResult } from './populate-watchlist';
+import { expandSectors, ExpandSectorsResult } from './expand-sectors';
 import { generateDigest, GenerateDigestResult } from './generate-digest';
 import { sendEmails, SendEmailsResult } from './send-emails';
 
@@ -14,6 +16,8 @@ export interface PipelineResult {
     fetchYoutube: FetchYoutubeResult | null;
     transcribe: TranscribeResult | null;
     analyze: AnalyzeResult | null;
+    watchlist: PopulateWatchlistResult | null;
+    sectorExpansion: ExpandSectorsResult | null;
     digest: GenerateDigestResult | null;
     emails: SendEmailsResult | null;
   };
@@ -29,12 +33,14 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     fetchYoutube: null,
     transcribe: null,
     analyze: null,
+    watchlist: null,
+    sectorExpansion: null,
     digest: null,
     emails: null,
   };
 
-  // === STEP 1/6: Fetch podcast feeds ===
-  console.log('\n=== STEP 1/6: Fetching podcast feeds ===');
+  // === STEP 1/8: Fetch podcast feeds ===
+  console.log('\n=== STEP 1/8: Fetching podcast feeds ===');
   try {
     steps.fetchFeeds = await fetchFeeds();
     allErrors.push(...steps.fetchFeeds.errors);
@@ -45,8 +51,8 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     console.error(`  ${msg}`);
   }
 
-  // === STEP 2/6: Fetch YouTube videos ===
-  console.log('\n=== STEP 2/6: Fetching YouTube videos ===');
+  // === STEP 2/8: Fetch YouTube videos ===
+  console.log('\n=== STEP 2/8: Fetching YouTube videos ===');
   try {
     steps.fetchYoutube = await fetchYoutube();
     allErrors.push(...steps.fetchYoutube.errors);
@@ -57,8 +63,8 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     console.error(`  ${msg}`);
   }
 
-  // === STEP 3/6: Transcribe all pending episodes ===
-  console.log('\n=== STEP 3/6: Transcribing all pending episodes ===');
+  // === STEP 3/8: Transcribe all pending episodes ===
+  console.log('\n=== STEP 3/8: Transcribing all pending episodes ===');
   try {
     steps.transcribe = await transcribeAll();
     allErrors.push(...steps.transcribe.errors);
@@ -71,8 +77,8 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     console.error(`  ${msg}`);
   }
 
-  // === STEP 4/6: Analyze transcriptions ===
-  console.log('\n=== STEP 4/6: Analyzing transcriptions ===');
+  // === STEP 4/8: Analyze transcriptions ===
+  console.log('\n=== STEP 4/8: Analyzing transcriptions ===');
   try {
     steps.analyze = await analyzeAll();
     allErrors.push(...steps.analyze.errors);
@@ -83,8 +89,30 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     console.error(`  ${msg}`);
   }
 
-  // === STEP 5/6: Generate daily digest ===
-  console.log('\n=== STEP 5/6: Generating daily digest ===');
+  // === STEP 4.5/8: Populate watchlist (NON-BLOCKING) ===
+  console.log('\n=== STEP 4.5/8: Populating watchlist ===');
+  try {
+    steps.watchlist = await populateWatchlist();
+    allErrors.push(...steps.watchlist.errors);
+    console.log(`  New: ${steps.watchlist.newStocks}, Updated: ${steps.watchlist.updatedStocks}, Skipped: ${steps.watchlist.skipped}`);
+  } catch (error) {
+    console.error(`  Watchlist population failed (non-blocking): ${error}`);
+    // Non-blocking: don't push to allErrors
+  }
+
+  // === STEP 4.6/8: Expand sector themes (NON-BLOCKING) ===
+  console.log('\n=== STEP 4.6/8: Expanding sector themes ===');
+  try {
+    steps.sectorExpansion = await expandSectors();
+    allErrors.push(...steps.sectorExpansion.errors);
+    console.log(`  Themes: ${steps.sectorExpansion.themesProcessed}, Stocks added: ${steps.sectorExpansion.stocksAdded}, Skipped: ${steps.sectorExpansion.themesSkipped}`);
+  } catch (error) {
+    console.error(`  Sector expansion failed (non-blocking): ${error}`);
+    // Non-blocking: don't push to allErrors
+  }
+
+  // === STEP 5/8: Generate daily digest ===
+  console.log('\n=== STEP 5/8: Generating daily digest ===');
   try {
     steps.digest = await generateDigest();
     allErrors.push(...steps.digest.errors);
@@ -95,8 +123,8 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     console.error(`  ${msg}`);
   }
 
-  // === STEP 6/6: Send emails ===
-  console.log('\n=== STEP 6/6: Sending emails ===');
+  // === STEP 6/8: Send emails ===
+  console.log('\n=== STEP 6/8: Sending emails ===');
   try {
     steps.emails = await sendEmails();
     allErrors.push(...steps.emails.errors);

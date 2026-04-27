@@ -134,6 +134,13 @@ export interface Catalyst {
   tickers: string[];
 }
 
+export interface SectorTheme {
+  theme: string;           // "光通訊", "CPU", "AI 伺服器"
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  reason: string;
+  specificStocks?: string[];  // KOL explicitly mentioned stocks in this sector
+}
+
 export interface AnalysisResult {
   signals: Signal[];
   key_insights: string[];
@@ -143,6 +150,7 @@ export interface AnalysisResult {
   riskAlerts: string[];
   catalysts: Catalyst[];
   podcastName: string;
+  sectorThemes?: SectorTheme[];
 }
 
 // Legacy interface for backward compatibility
@@ -240,6 +248,15 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 - 包含日期、事件描述、影響的標的
 - 若無則返回空陣列
 
+### 9. 產業/主題展望（sectorThemes）
+如果 KOL 提到某個產業或主題的展望（例如「光通股看好」、「CPU 類股受惠」、「AI 伺服器需求增加」、「電動車供應鏈」），請在 sectorThemes 欄位中列出：
+- theme: 產業/主題名稱（如 "光通訊"、"CPU"、"AI 伺服器"）
+- sentiment: bullish/bearish/neutral
+- reason: KOL 看好/看空該產業的理由
+- specificStocks: KOL 在討論這個主題時有明確提到的具體個股（如果有的話），用陣列列出 ticker
+- 只收錄 KOL 有實質分析的產業展望，不要收錄僅順帶提及的
+- 若無產業展望則返回空陣列
+
 ## 分析原則：
 - 只收錄 KOL 有花篇幅深入討論的標的
 - 必須有明確理由（基本面、技術面、催化劑等）才收錄
@@ -296,6 +313,7 @@ ${transcript.slice(0, 40000)}`
   if (!Array.isArray(result.episodeHighlights)) result.episodeHighlights = [];
   if (!Array.isArray(result.riskAlerts)) result.riskAlerts = [];
   if (!Array.isArray(result.catalysts)) result.catalysts = [];
+  if (!Array.isArray(result.sectorThemes)) result.sectorThemes = [];
 
   return result;
 }

@@ -1,0 +1,78 @@
+name: Stock Price Monitor
+
+on:
+  schedule:
+    # After Taiwan market close (13:30 TWN = 05:30 UTC), run at 05:35 UTC
+    - cron: '35 5 * * 1-5'
+    # US market midday check (10:00 ET = 14:00 UTC during EDT)
+    - cron: '0 14 * * 1-5'
+    # After US market close (16:00 ET = 21:00 UTC during EDT), run at 21:05 UTC
+    - cron: '5 21 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      market:
+        description: 'Market filter (US or TW, leave empty for all)'
+        required: false
+        type: string
+      backfill:
+        description: 'Backfill historical prices for new stocks'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  stock-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine market filter
+        id: market
+        run: |
+          # For scheduled runs, determine market based on time
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "05" ]; then
+              echo "filter=TW" >> $GITHUB_OUTPUT
+              echo "Running TW market check (post Taiwan close)"
+            elif [ "$HOUR" = "14" ] || [ "$HOUR" = "21" ]; then
+              echo "filter=US" >> $GITHUB_OUTPUT
+              echo "Running US market check"
+            else
+              echo "filter=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "filter=${{ inputs.market }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run stock monitor
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          ARGS=""
+          if [ -n "${{ steps.market.outputs.filter }}" ]; then
+            ARGS="$ARGS --market ${{ steps.market.outputs.filter }}"
+          fi
+          if [ "${{ inputs.backfill }}" = "true" ]; then
+            ARGS="$ARGS --backfill"
+          fi
+          npx tsx scripts/stock-monitor.ts $ARGS

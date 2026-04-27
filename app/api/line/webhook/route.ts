@@ -6,15 +6,15 @@ const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Msg = any;
 
-const ALERT_TYPE_CONFIG: Record<string, { label: string; score: number }> = {
-  significant_drop_20pct: { label: '大幅回檔', score: 30 },
-  rsi_oversold: { label: 'RSI 超賣', score: 25 },
-  significant_drop_10pct: { label: '回檔 10%', score: 20 },
-  near_kol_support: { label: '接近支撐', score: 15 },
-  sma_support: { label: '均線支撐', score: 15 },
-  significant_drop_5pct: { label: '回檔 5%', score: 10 },
-  consolidation: { label: '盤整待突破', score: 10 },
-  ai_entry_signal: { label: 'AI 訊號', score: 15 },
+const ALERT_TYPE_CONFIG: Record<string, { label: string; detail: string; score: number }> = {
+  significant_drop_20pct: { label: '大幅回檔', detail: '從52週高點回檔逾20%', score: 30 },
+  rsi_oversold: { label: 'RSI 超賣', detail: 'RSI < 30，市場可能超賣', score: 25 },
+  significant_drop_10pct: { label: '回檔 10%', detail: '從近20日高點回檔逾10%', score: 20 },
+  near_kol_support: { label: '接近支撐', detail: '接近 KOL 提及的支撐價位', score: 15 },
+  sma_support: { label: '均線支撐', detail: '觸及50日或200日均線後反彈', score: 15 },
+  significant_drop_5pct: { label: '回檔 5%', detail: '從近20日高點回檔逾5%', score: 10 },
+  consolidation: { label: '盤整待突破', detail: '價格區間收窄，留意突破方向', score: 10 },
+  ai_entry_signal: { label: 'AI 訊號', detail: 'AI 偵測到入場機會', score: 15 },
 };
 
 const SENTIMENT_ICON: Record<string, string> = {
@@ -351,24 +351,15 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
 
   const body: Msg[] = [];
 
-  // Price info
+  // === Section 1: Price ===
   if (stock.current_price) {
-    const priceText = `${currency}${stock.current_price.toFixed(2)}`;
-    let changeText = '';
-    if (stock.price_at_first_mention && stock.price_at_first_mention > 0) {
-      const change = ((stock.current_price - stock.price_at_first_mention) / stock.price_at_first_mention * 100);
-      const sign = change >= 0 ? '+' : '';
-      changeText = `  (${sign}${change.toFixed(1)}%)`;
-    }
     body.push({
-      type: 'box', layout: 'horizontal', contents: [
-        { type: 'text', text: '現價', size: 'sm', color: '#999999', flex: 2 },
-        { type: 'text', text: `${priceText}${changeText}`, size: 'md', weight: 'bold', color: '#111111', flex: 5, align: 'end' },
-      ],
+      type: 'text', text: `${currency}${stock.current_price.toFixed(2)}`,
+      size: 'xl', weight: 'bold', color: '#111111',
     });
   }
 
-  // Recent alerts
+  // === Section 2: Technical signals ===
   const { data: alerts } = await supabaseAdmin
     .from('stock_alerts')
     .select('alert_type, technical_snapshot, created_at')
@@ -377,63 +368,93 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     .limit(5);
 
   if (alerts && alerts.length > 0) {
+    body.push({ type: 'separator', margin: 'lg' });
+
+    // RSI heat bar
     const latestSnapshot = alerts[0].technical_snapshot as { rsi14?: number } | null;
     const rsi = latestSnapshot?.rsi14;
-
     if (rsi !== undefined && rsi !== null) {
-      body.push({ type: 'separator', margin: 'lg' });
       const rsiColor = rsi < 30 ? '#2196F3' : rsi < 40 ? '#64B5F6' : rsi < 60 ? '#9E9E9E' : rsi < 70 ? '#FF9800' : '#F44336';
+      const rsiLabel = rsi < 30 ? '偏冷' : rsi < 40 ? '偏弱' : rsi < 60 ? '中性' : rsi < 70 ? '偏熱' : '過熱';
       body.push({
         type: 'box', layout: 'horizontal', margin: 'md', contents: [
-          { type: 'text', text: '市場熱度', size: 'xs', color: '#999999', flex: 2 },
+          { type: 'text', text: `市場熱度 ${rsiLabel}`, size: 'xs', color: '#999999', flex: 3 },
           { type: 'text', text: `${rsi.toFixed(0)} / 100`, size: 'xs', weight: 'bold', color: rsiColor, flex: 2, align: 'end' },
+        ],
+      });
+      // Visual bar
+      body.push({
+        type: 'box', layout: 'vertical', height: '4px', backgroundColor: '#E0E0E0', cornerRadius: '2px', margin: 'sm',
+        contents: [
+          { type: 'box', layout: 'vertical', contents: [], width: `${Math.min(rsi, 100)}%`, height: '4px', backgroundColor: rsiColor, cornerRadius: '2px' },
         ],
       });
     }
 
-    const alertLabels = [...new Set(alerts.map((a: Msg) => ALERT_TYPE_CONFIG[a.alert_type]?.label).filter(Boolean))];
-    if (alertLabels.length > 0) {
+    // Alert details with explanation
+    const uniqueAlertTypes = [...new Set(alerts.map((a: Msg) => a.alert_type as string))];
+    for (const alertType of uniqueAlertTypes) {
+      const cfg = ALERT_TYPE_CONFIG[alertType];
+      if (!cfg) continue;
       body.push({
-        type: 'text', text: `⚡ ${alertLabels.join('・')}`, size: 'xs', color: '#E65100', margin: 'sm',
+        type: 'text', text: `⚡ ${cfg.label}：${cfg.detail}`,
+        size: 'xs', color: '#E65100', wrap: true, margin: 'sm',
       });
     }
   }
 
-  // KOL opinions (filter out opinions older than 2 months, sort newest first)
+  // === Section 3: KOL opinions ===
   const kolSources = ((stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>)
     .filter(k => isWithinTwoMonths(k.date || ''))
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if (kolSources.length > 0) {
-    body.push({ type: 'separator', margin: 'lg' });
-    body.push({ type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' });
 
-    // Deduplicate by KOL name — newest first so first match = latest opinion
-    const kolMap = new Map<string, { kol: string; reason: string; sentiment: string; date: string }>();
-    for (const k of kolSources) {
-      if (!kolMap.has(k.kol)) {
-        kolMap.set(k.kol, { kol: k.kol, reason: k.reason, sentiment: k.sentiment || 'bullish', date: k.date || '' });
-      }
+  // Deduplicate by KOL name — newest first so first match = latest opinion
+  const kolMap = new Map<string, { kol: string; reason: string; sentiment: string; date: string }>();
+  for (const k of kolSources) {
+    if (!kolMap.has(k.kol)) {
+      kolMap.set(k.kol, { kol: k.kol, reason: k.reason, sentiment: k.sentiment || 'bullish', date: k.date || '' });
     }
+  }
 
-    const uniqueKols = Array.from(kolMap.values())
-      .sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol))
-      .slice(0, 5);
+  const uniqueKols = Array.from(kolMap.values())
+    .sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol))
+    .slice(0, 5);
+
+  if (uniqueKols.length > 0) {
+    body.push({ type: 'separator', margin: 'lg' });
+    body.push({ type: 'text', text: 'KOL 觀點', size: 'sm', weight: 'bold', color: '#333333', margin: 'md' });
+
     for (const k of uniqueKols) {
       const icon = SENTIMENT_ICON[k.sentiment] || '📣';
       const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
+      const sentColor = k.sentiment === 'bullish' ? '#1B5E20' : k.sentiment === 'bearish' ? '#B71C1C' : '#F57F17';
       const dateStr = formatShortDate(k.date);
+
+      // KOL name + sentiment tag as header
       body.push({
-        type: 'text',
-        text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason}`,
-        size: 'xs', color: '#555555', wrap: true, margin: 'sm',
+        type: 'box', layout: 'horizontal', margin: 'lg', contents: [
+          { type: 'text', text: `${icon} ${k.kol}`, size: 'xs', weight: 'bold', color: '#333333', flex: 4 },
+          {
+            type: 'box', layout: 'vertical', cornerRadius: '4px', paddingAll: '2px',
+            backgroundColor: sentColor + '18', flex: 0,
+            contents: [
+              { type: 'text', text: `${sentLabel}${dateStr}`, size: 'xxs', color: sentColor, align: 'center' },
+            ],
+          },
+        ],
+      });
+      // Reason as body text
+      body.push({
+        type: 'text', text: k.reason, size: 'xs', color: '#666666', wrap: true, margin: 'xs',
       });
     }
   }
 
   // Consensus
   if (stock.consensus) {
+    body.push({ type: 'separator', margin: 'lg' });
     body.push({
-      type: 'text', text: `共識：${stock.consensus}`, size: 'xxs', color: '#AAAAAA', margin: 'lg',
+      type: 'text', text: `共識：${stock.consensus}`, size: 'xs', color: '#999999', margin: 'md',
     });
   }
 
@@ -457,7 +478,7 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: `數據來自 ${kolSources.length} 位 KOL`, size: 'xxs', color: '#AAAAAA', align: 'center' },
+          { type: 'text', text: `${uniqueKols.length} 位 KOL 近期觀點 ｜ 輸入「說明」了解更多`, size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
         ],
       },
     },

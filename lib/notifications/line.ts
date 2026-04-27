@@ -53,28 +53,50 @@ async function sendLinePushMessage(to: string, messages: LineMessage[]): Promise
 }
 
 /**
+ * Describe RSI in plain language.
+ */
+function describeRsi(rsi: number): string {
+  if (rsi < 30) return `市場熱度：${rsi.toFixed(0)} 分（偏冷，賣壓已釋放大半，可能接近低點）`;
+  if (rsi < 40) return `市場熱度：${rsi.toFixed(0)} 分（偏弱，買氣不足）`;
+  if (rsi < 60) return `市場熱度：${rsi.toFixed(0)} 分（中性，多空拉鋸）`;
+  if (rsi < 70) return `市場熱度：${rsi.toFixed(0)} 分（偏熱，買氣活絡）`;
+  return `市場熱度：${rsi.toFixed(0)} 分（過熱，短期追高風險較大）`;
+}
+
+/**
+ * Format stock display name. Show Chinese name for TW stocks.
+ */
+function formatStockName(result: DetectionResult): string {
+  const marketEmoji = result.market === 'US' ? '🇺🇸' : '🇹🇼';
+  // For TW stocks, result.ticker already contains Chinese name like "台積電 (2330)"
+  return `${marketEmoji} ${result.ticker}`;
+}
+
+/**
  * Format a detection result into a LINE notification message.
  */
 function formatAlertMessage(result: DetectionResult): string {
   const lines: string[] = [];
 
   // Header
-  const marketEmoji = result.market === 'US' ? '🇺🇸' : '🇹🇼';
-  lines.push(`📊 股票觀察提醒：${result.ticker} ${marketEmoji}`);
+  lines.push(`📊 股票觀察提醒：${formatStockName(result)}`);
   lines.push('');
 
-  // Current price and signals
-  for (const signal of result.signals) {
-    const snapshot = signal.technicalSnapshot;
+  // Current price
+  const snapshot = result.signals[0]?.technicalSnapshot;
+  if (snapshot) {
+    const currency = result.market === 'TW' ? 'NT$' : '$';
+    lines.push(`現價：${currency}${snapshot.currentPrice.toFixed(2)}`);
 
-    lines.push(`現價：${snapshot.currentPrice.toFixed(2)}`);
-
+    // RSI in plain language
     if (snapshot.rsi14 !== null) {
-      const rsiLabel = snapshot.rsi14 < 30 ? '（偏低）' : snapshot.rsi14 > 70 ? '（偏高）' : '';
-      lines.push(`RSI(14)：${snapshot.rsi14.toFixed(1)}${rsiLabel}`);
+      lines.push(describeRsi(snapshot.rsi14));
     }
+  }
 
-    lines.push('');
+  // Signals in plain language
+  lines.push('');
+  for (const signal of result.signals) {
     lines.push(`📌 ${signal.triggerReason}`);
   }
 
@@ -88,16 +110,15 @@ function formatAlertMessage(result: DetectionResult): string {
     }
   }
 
-  // Technical summary
-  const snapshot = result.signals[0]?.technicalSnapshot;
+  // Technical summary in plain language
   if (snapshot) {
     lines.push('');
+    const currency = result.market === 'TW' ? 'NT$' : '$';
     const techParts: string[] = [];
-    if (snapshot.sma50) techParts.push(`SMA50: ${snapshot.sma50.toFixed(2)}`);
-    if (snapshot.sma200) techParts.push(`SMA200: ${snapshot.sma200.toFixed(2)}`);
-    if (snapshot.bbLower) techParts.push(`BB下緣: ${snapshot.bbLower.toFixed(2)}`);
+    if (snapshot.sma50) techParts.push(`50 日均價 ${currency}${snapshot.sma50.toFixed(2)}`);
+    if (snapshot.sma200) techParts.push(`200 日均價 ${currency}${snapshot.sma200.toFixed(2)}`);
     if (techParts.length > 0) {
-      lines.push(`技術面：${techParts.join(' | ')}`);
+      lines.push(`參考均價：${techParts.join('｜')}`);
     }
   }
 

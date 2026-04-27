@@ -27,13 +27,16 @@ const SENTIMENT_ICON: Record<string, string> = {
 
 /**
  * LINE Webhook endpoint.
+ * All commands require "/" prefix (except @KOL which uses "@").
+ * Messages without prefix are ignored to avoid false alarms in group chats.
+ *
  * Commands:
- * - "說明" / "help" / "指令" → usage guide
- * - "清單" / "追蹤" → watchlist with entry opportunities
- * - "kol" → list all available KOLs
- * - "@KOL名稱" → KOL recent opinions
- * - Stock ticker (TSLA, 2330, 台積電) → stock detail
- * - "groupid" → group ID echo (admin)
+ * - /說明, /help, /指令 → usage guide
+ * - /清單, /追蹤 → watchlist with entry opportunities
+ * - /kol → list all available KOLs
+ * - @KOL名稱 → KOL recent opinions
+ * - /TSLA, /2330, /台積電 → stock detail
+ * - /groupid → group ID echo (admin)
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -51,12 +54,19 @@ export async function POST(request: NextRequest) {
     if (event.type !== 'message' || !event.message?.text) continue;
 
     const rawText = event.message.text.trim();
-    const text = rawText.toLowerCase();
     const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (!token) continue;
 
-    // Command: groupid
-    if (text.includes('groupid') && source.type === 'group') {
+    // Only respond to messages with "/" prefix or "@" prefix
+    // This prevents false alarms from group chat conversations
+    if (!rawText.startsWith('/') && !rawText.startsWith('@')) continue;
+
+    // Strip "/" prefix and parse command
+    const cmdText = rawText.startsWith('/') ? rawText.slice(1).trim() : rawText;
+    const cmdLower = cmdText.toLowerCase();
+
+    // Command: groupid (admin)
+    if (cmdLower === 'groupid' && source.type === 'group') {
       await replyMessage(token, event.replyToken, [{
         type: 'text', text: `✅ Group ID: ${source.groupId}`,
       }]);
@@ -64,38 +74,43 @@ export async function POST(request: NextRequest) {
     }
 
     // Command: 說明 / help / 指令
-    if (text === '說明' || text === 'help' || text === '指令') {
+    if (cmdLower === '說明' || cmdLower === 'help' || cmdLower === '指令') {
       await replyMessage(token, event.replyToken, [buildHelpMessage()]);
       continue;
     }
 
     // Command: 清單 / 追蹤
-    if (text === '清單' || text === '追蹤') {
+    if (cmdLower === '清單' || cmdLower === '追蹤') {
       await replyMessage(token, event.replyToken, await buildWatchlistReply());
       continue;
     }
 
     // Command: KOL list
-    if (text === 'kol') {
+    if (cmdLower === 'kol') {
       await replyMessage(token, event.replyToken, await buildKolListReply());
       continue;
     }
 
-    // Command: @KOL名稱
-    if (rawText.startsWith('@') && rawText.length > 1) {
-      const kolName = rawText.slice(1).trim();
+    // Command: @KOL名稱 (works with both "@股癌" and "/@股癌")
+    if (cmdText.startsWith('@') && cmdText.length > 1) {
+      const kolName = cmdText.slice(1).trim();
       await replyMessage(token, event.replyToken, await buildKolReply(kolName));
       continue;
     }
 
-    // Command: stock ticker lookup (TSLA, 2330, 台積電, etc.)
-    // Only process short messages that look like stock queries
-    if (rawText.length <= 20 && !rawText.startsWith('/')) {
-      const stockReply = await buildStockReply(rawText);
+    // Command: stock ticker lookup (/TSLA, /2330, /台積電, etc.)
+    if (cmdText.length > 0 && cmdText.length <= 20) {
+      const stockReply = await buildStockReply(cmdText);
       if (stockReply) {
         await replyMessage(token, event.replyToken, stockReply);
         continue;
       }
+      // Stock not found — let user know
+      await replyMessage(token, event.replyToken, [{
+        type: 'text',
+        text: `🔍 找不到「${cmdText}」\n\n輸入 /清單 查看所有追蹤股票\n輸入 /說明 查看指令`,
+      }]);
+      continue;
     }
   }
 
@@ -121,16 +136,16 @@ function buildHelpMessage(): Msg {
   return {
     type: 'text',
     text: [
-      '📋 可用指令：',
+      '📋 可用指令（需加 / 前綴）：',
       '',
-      '清單 → 入場機會 + 所有追蹤股票',
-      'KOL → 查看所有 KOL 列表',
-      '說明 → 顯示此說明',
+      '/清單 → 入場機會 + 所有追蹤股票',
+      '/kol → 查看所有 KOL 列表',
+      '/說明 → 顯示此說明',
       '',
-      '🔍 查個股：直接輸入代號或名稱',
-      '  例：TSLA、2330、台積電、TSMC',
+      '🔍 查個股：/ + 代號或名稱',
+      '  例：/TSLA、/2330、/台積電',
       '',
-      '📣 查 KOL：輸入 @KOL名稱',
+      '📣 查 KOL：@ + KOL名稱',
       '  例：@股癌、@NaNa',
       '',
       '───────────',
@@ -511,7 +526,7 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: `${uniqueKols.length} 位 KOL 近期觀點 ｜ 輸入「說明」了解更多`, size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
+          { type: 'text', text: `${uniqueKols.length} 位 KOL 近期觀點 ｜ /說明 了解更多`, size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
         ],
       },
     },
@@ -664,7 +679,7 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
   }
 
   if (bullish.length === 0 && bearish.length === 0 && monitor.length === 0) {
-    return [{ type: 'text', text: `找不到「${kolName}」的觀點資料。\n\n提示：輸入 @KOL名稱，如 @股癌、@NaNa` }];
+    return [{ type: 'text', text: `找不到「${kolName}」的觀點資料。\n\n提示：輸入 /kol 查看所有 KOL 列表` }];
   }
 
   const body: Msg[] = [];
@@ -867,9 +882,9 @@ async function buildWatchlistReply(): Promise<Msg[]> {
     listBody.push({ type: 'text', text: twTickerList, size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
   }
   listBody.push({ type: 'separator', margin: 'lg' });
-  listBody.push({ type: 'text', text: '💡 輸入股票代號查詳情', size: 'xs', color: '#999999', margin: 'md' });
-  listBody.push({ type: 'text', text: '💡 輸入 @KOL名稱 查觀點', size: 'xs', color: '#999999', margin: 'xs' });
-  listBody.push({ type: 'text', text: '💡 輸入「說明」查看所有指令', size: 'xs', color: '#999999', margin: 'xs' });
+  listBody.push({ type: 'text', text: '💡 輸入 /代號 查詳情（如 /TSLA）', size: 'xs', color: '#999999', margin: 'md' });
+  listBody.push({ type: 'text', text: '💡 輸入 @名稱 查觀點（如 @股癌）', size: 'xs', color: '#999999', margin: 'xs' });
+  listBody.push({ type: 'text', text: '💡 輸入 /說明 查看所有指令', size: 'xs', color: '#999999', margin: 'xs' });
 
   messages.push({
     type: 'flex',

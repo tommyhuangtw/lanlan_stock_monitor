@@ -193,7 +193,7 @@ async function main() {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: '輸入「說明」查看所有指令', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
+          { type: 'text', text: '輸入 /說明 查看所有指令', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
         ],
       },
     },

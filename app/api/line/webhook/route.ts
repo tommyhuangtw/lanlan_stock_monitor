@@ -267,6 +267,16 @@ function isWithinTwoMonths(dateStr: string): boolean {
   return d >= cutoff;
 }
 
+// Priority KOLs — always show first when multiple KOLs mention same stock
+const PRIORITY_KOLS = ['股癌', '游庭皓'];
+
+function kolPriority(kolName: string): number {
+  for (let i = 0; i < PRIORITY_KOLS.length; i++) {
+    if (kolName.includes(PRIORITY_KOLS[i])) return i;
+  }
+  return PRIORITY_KOLS.length;
+}
+
 // Common English aliases for stocks (uppercase keys)
 const TICKER_ALIASES: Record<string, string> = {
   'TSMC': '2330.TW',
@@ -389,14 +399,15 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     }
   }
 
-  // KOL opinions (filter out opinions older than 2 months)
+  // KOL opinions (filter out opinions older than 2 months, sort newest first)
   const kolSources = ((stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>)
-    .filter(k => isWithinTwoMonths(k.date || ''));
+    .filter(k => isWithinTwoMonths(k.date || ''))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if (kolSources.length > 0) {
     body.push({ type: 'separator', margin: 'lg' });
     body.push({ type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' });
 
-    // Deduplicate by KOL name, keep latest
+    // Deduplicate by KOL name — newest first so first match = latest opinion
     const kolMap = new Map<string, { kol: string; reason: string; sentiment: string; date: string }>();
     for (const k of kolSources) {
       if (!kolMap.has(k.kol)) {
@@ -404,7 +415,9 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       }
     }
 
-    const uniqueKols = Array.from(kolMap.values()).slice(0, 5);
+    const uniqueKols = Array.from(kolMap.values())
+      .sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol))
+      .slice(0, 5);
     for (const k of uniqueKols) {
       const icon = SENTIMENT_ICON[k.sentiment] || '📣';
       const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
@@ -517,7 +530,8 @@ async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): 
     { type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' },
   ];
 
-  for (const k of opinions.slice(0, 5)) {
+  const sortedOpinions = [...opinions].sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol));
+  for (const k of sortedOpinions.slice(0, 5)) {
     const icon = SENTIMENT_ICON[k.sentiment] || '📣';
     const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
     const dateStr = formatShortDate(k.date);

@@ -108,6 +108,9 @@ function parseJsonSafe(content: string): unknown {
   }
 }
 
+// Max retries for AI calls that may return truncated/invalid JSON
+const MAX_RETRIES = 2;
+
 // OpenRouter client (OpenAI-compatible API)
 // Uses a placeholder key when OPENROUTER_API_KEY is not set to avoid crashing
 // at import time; actual API calls will fail with an auth error and are handled
@@ -310,40 +313,54 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
 }`;
 
 export async function analyzeTranscript(transcript: string, episodeTitle: string, podcastName?: string): Promise<AnalysisResult> {
-  const response = await openrouter.chat.completions.create({
-    model: PRO_MODEL,
-    max_tokens: 7000,
-    temperature: 0.3,
-    messages: [
-      {
-        role: 'system',
-        content: ANALYSIS_SYSTEM_PROMPT
-      },
-      {
-        role: 'user',
-        content: `Podcast: ${podcastName || 'Unknown'}
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: PRO_MODEL,
+        max_tokens: 7000,
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: ANALYSIS_SYSTEM_PROMPT
+          },
+          {
+            role: 'user',
+            content: `Podcast: ${podcastName || 'Unknown'}
 Episode: ${episodeTitle}
 
 轉錄內容：
 ${transcript.slice(0, 40000)}`
+          }
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+
+      const result = parseJsonSafe(content) as AnalysisResult;
+      result.podcastName = podcastName || 'Unknown';
+
+      // Ensure required arrays exist (AI may omit them)
+      if (!Array.isArray(result.signals)) result.signals = [];
+      if (!Array.isArray(result.key_insights)) result.key_insights = [];
+      if (!Array.isArray(result.episodeHighlights)) result.episodeHighlights = [];
+      if (!Array.isArray(result.riskAlerts)) result.riskAlerts = [];
+      if (!Array.isArray(result.catalysts)) result.catalysts = [];
+      if (!Array.isArray(result.sectorThemes)) result.sectorThemes = [];
+
+      return result;
+    } catch (error) {
+      console.error(`[analyzeTranscript] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed for "${episodeTitle}":`, error);
+      if (attempt < MAX_RETRIES) {
+        const delay = 1000 * (attempt + 1);
+        console.log(`[analyzeTranscript] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
       }
-    ],
-  });
-
-  const content = response.choices[0]?.message?.content || '{}';
-
-  const result = parseJsonSafe(content) as AnalysisResult;
-  result.podcastName = podcastName || 'Unknown';
-
-  // Ensure required arrays exist (AI may omit them)
-  if (!Array.isArray(result.signals)) result.signals = [];
-  if (!Array.isArray(result.key_insights)) result.key_insights = [];
-  if (!Array.isArray(result.episodeHighlights)) result.episodeHighlights = [];
-  if (!Array.isArray(result.riskAlerts)) result.riskAlerts = [];
-  if (!Array.isArray(result.catalysts)) result.catalysts = [];
-  if (!Array.isArray(result.sectorThemes)) result.sectorThemes = [];
-
-  return result;
+    }
+  }
+  throw new Error('Unreachable');
 }
 
 // Convert full analysis to legacy format for database storage
@@ -668,7 +685,6 @@ function normalizeConsolidatedReport(raw: Record<string, unknown>, totalEpisodes
 }
 
 // Quick digest prompt matching n8n workflow "AI 生成分析摘要"
-const MAX_RETRIES = 2;
 
 export async function generateQuickDigest(report: ConsolidatedReport): Promise<{ quickDigest: string[]; marketMood: string }> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {

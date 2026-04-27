@@ -101,9 +101,12 @@ function parseJsonSafe(content: string): unknown {
 }
 
 // OpenRouter client (OpenAI-compatible API)
+// Uses a placeholder key when OPENROUTER_API_KEY is not set to avoid crashing
+// at import time; actual API calls will fail with an auth error and are handled
+// by try/catch in callers like generate-aliases.ts.
 export const openrouter = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY || 'not-configured',
   defaultHeaders: {
     'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
     'X-Title': 'Investment Signal Monitor',

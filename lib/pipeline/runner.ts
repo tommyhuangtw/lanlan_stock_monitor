@@ -143,6 +143,12 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
   try {
     steps.emails = await sendEmails();
     allErrors.push(...steps.emails.errors);
+    if (steps.emails.warnings.length > 0) {
+      console.log(`  Warnings (${steps.emails.warnings.length}):`);
+      for (const w of steps.emails.warnings) {
+        console.log(`    - ${w}`);
+      }
+    }
     console.log(`  Users: ${steps.emails.usersProcessed}, Sent: ${steps.emails.emailsSent}, Skipped: ${steps.emails.skipped}`);
   } catch (error) {
     const msg = `Email sending failed: ${error}`;

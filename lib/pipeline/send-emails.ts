@@ -163,6 +163,7 @@ export interface SendEmailsResult {
   skipped: number;
   alreadySent: number;
   errors: string[];
+  warnings: string[];
 }
 
 // Prepared email data for a single user, ready for batch sending
@@ -185,6 +186,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
     skipped: 0,
     alreadySent: 0,
     errors: [],
+    warnings: [],
   };
 
   const today = new Date();
@@ -253,7 +255,7 @@ export async function sendEmails(): Promise<SendEmailsResult> {
     const userEmail = ((user.email as string) || '').trim();
 
     if (!userEmail || !isValidEmail(userEmail)) {
-      results.errors.push(`Skipped invalid email format: ${user.email}`);
+      results.warnings.push(`Skipped invalid email format: ${user.email}`);
       results.skipped++;
       continue;
     }

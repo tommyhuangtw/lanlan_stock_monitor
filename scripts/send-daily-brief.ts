@@ -2,9 +2,9 @@
  * Daily Brief Push Notification
  *
  * Sends a daily summary to LINE group showing:
- * - Stocks with recent entry signals (last 24h)
+ * - Stocks with recent entry signals (last 24h) with detailed reasons
+ * - Current price and KOL consensus
  * - Total monitoring stats
- * - Usage hints for interactive commands
  *
  * Run after the daily pipeline or stock monitor:
  *   npx tsx scripts/send-daily-brief.ts
@@ -19,15 +19,16 @@ const supabase = createClient(
 
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/push';
 
-const ALERT_TYPE_LABELS: Record<string, string> = {
-  significant_drop_20pct: '大幅回檔',
-  rsi_oversold: 'RSI 超賣',
-  significant_drop_10pct: '回檔 10%',
-  near_kol_support: '接近支撐',
-  sma_support: '均線支撐',
-  significant_drop_5pct: '回檔 5%',
-  consolidation: '盤整待突破',
-  ai_entry_signal: 'AI 訊號',
+// Signal weights for scoring — higher = more actionable
+const SIGNAL_WEIGHTS: Record<string, number> = {
+  significant_drop_20pct: 50,
+  rsi_oversold: 40,
+  significant_drop_10pct: 35,
+  near_kol_support: 30,
+  significant_drop_5pct: 20,
+  sma_support: 15,
+  consolidation: 5,
+  ai_entry_signal: 15,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,6 +58,18 @@ async function sendPush(messages: Flex[]): Promise<boolean> {
   return true;
 }
 
+interface AlertedStock {
+  displayName: string;
+  market: string;
+  currentPrice: number | null;
+  score: number;
+  primaryReason: string;
+  primaryAlertType: string;
+  rsi: number | null;
+  consensus: string | null;
+  kolCount: number;
+}
+
 async function main() {
   console.log('Generating daily brief...');
 
@@ -71,7 +84,7 @@ async function main() {
       .eq('status', 'active'),
     supabase
       .from('stock_alerts')
-      .select('ticker, alert_type, technical_snapshot, created_at')
+      .select('ticker, alert_type, trigger_reason, technical_snapshot, kol_context, created_at')
       .gte('created_at', oneDayAgo.toISOString())
       .order('created_at', { ascending: false }),
   ]);
@@ -89,38 +102,63 @@ async function main() {
     tickerAlerts.get(a.ticker)!.push(a);
   }
 
-  // Match alerts to stocks
-  interface AlertedStock {
-    displayName: string;
-    market: string;
-    alertLabels: string[];
-    rsi: number | null;
-    consensus: string | null;
-  }
-
+  // Match alerts to stocks and compute scores
   const alertedStocks: AlertedStock[] = [];
   for (const stock of stocks) {
     const sa = tickerAlerts.get(stock.ticker) || tickerAlerts.get(stock.ticker_normalized) || [];
     if (sa.length === 0) continue;
 
-    const labels = [...new Set(
-      sa.map(a => ALERT_TYPE_LABELS[a.alert_type]).filter(Boolean)
-    )];
+    // Compute weighted score and find highest-priority alert
+    let score = 0;
+    let bestWeight = -1;
+    let primaryReason = '';
+    let primaryAlertType = '';
 
-    const snap = sa[0]?.technical_snapshot as { rsi14?: number } | null;
+    for (const a of sa) {
+      const weight = SIGNAL_WEIGHTS[a.alert_type] || 0;
+      score += weight;
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        primaryReason = a.trigger_reason || a.alert_type;
+        primaryAlertType = a.alert_type;
+      }
+    }
+
+    // Bonus for consensus and mention count
+    if (stock.consensus === '多方共識') score += 10;
+    if ((stock.mention_count || 0) >= 3) score += 5;
+
+    // Extract current price and RSI from the latest alert's technical_snapshot
+    const snap = sa[0]?.technical_snapshot as { currentPrice?: number; rsi14?: number } | null;
+
+    // Count unique KOLs from kol_context
+    const kolNames = new Set<string>();
+    for (const a of sa) {
+      const ctx = a.kol_context as Array<{ kol: string }> | null;
+      if (ctx) {
+        for (const k of ctx) kolNames.add(k.kol);
+      }
+    }
 
     alertedStocks.push({
       displayName: stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker,
       market: stock.market,
-      alertLabels: labels,
+      currentPrice: snap?.currentPrice ?? null,
+      score,
+      primaryReason,
+      primaryAlertType,
       rsi: snap?.rsi14 ?? null,
       consensus: stock.consensus,
+      kolCount: kolNames.size,
     });
   }
 
-  // Sort by number of signal types (more signals = more interesting)
-  alertedStocks.sort((a, b) => b.alertLabels.length - a.alertLabels.length);
-  const topPicks = alertedStocks.slice(0, 5);
+  // Sort by score (highest first)
+  alertedStocks.sort((a, b) => b.score - a.score);
+  const topPicks = alertedStocks.slice(0, 6);
+
+  // Check if all signals are low-value (consolidation/sma only)
+  const hasStrongSignal = topPicks.some(p => p.score > 20);
 
   // Build Flex Message
   const bodyContents: Flex[] = [];
@@ -128,20 +166,45 @@ async function main() {
   if (topPicks.length > 0) {
     for (const pick of topPicks) {
       const emoji = pick.market === 'TW' ? '🇹🇼' : '🇺🇸';
-      const consensus = pick.consensus === '多方共識' ? ' 👥' : '';
+      const currency = pick.market === 'TW' ? 'NT$' : '$';
 
+      // Line 1: name + current price
+      const priceStr = pick.currentPrice ? `  ${currency}${pick.currentPrice.toFixed(2)}` : '';
       const row: Flex[] = [
         {
           type: 'box', layout: 'horizontal', spacing: 'sm', contents: [
             { type: 'text', text: `${emoji} ${pick.displayName}`, size: 'sm', weight: 'bold', color: '#333333', flex: 5, wrap: true },
+            ...(pick.currentPrice ? [{ type: 'text', text: `${currency}${pick.currentPrice.toFixed(2)}`, size: 'xs', color: '#666666', flex: 0, align: 'end' as const }] : []),
           ],
         },
-        { type: 'text', text: `⚡ ${pick.alertLabels.join('・')}${consensus}`, size: 'xs', color: '#E65100', margin: 'xs' },
       ];
 
-      if (pick.rsi !== null) {
-        const c = pick.rsi < 30 ? '#2196F3' : pick.rsi < 40 ? '#64B5F6' : '#9E9E9E';
-        row.push({ type: 'text', text: `熱度 ${pick.rsi.toFixed(0)}/100`, size: 'xxs', color: c, margin: 'xs' });
+      // Line 2: trigger reason with color based on alert type
+      const reasonColor = pick.primaryAlertType.includes('drop') || pick.primaryAlertType === 'rsi_oversold'
+        ? '#E65100'
+        : pick.primaryAlertType === 'sma_support' || pick.primaryAlertType === 'near_kol_support'
+          ? '#1565C0'
+          : '#9E9E9E';
+      row.push({
+        type: 'text', text: `⚡ ${pick.primaryReason}`,
+        size: 'xs', color: reasonColor, wrap: true, margin: 'xs',
+      });
+
+      // Line 3 (optional): RSI oversold / KOL count / consensus
+      const tags: string[] = [];
+      if (pick.rsi !== null && pick.rsi < 30) {
+        tags.push(`RSI ${pick.rsi.toFixed(0)} 超賣`);
+      }
+      if (pick.kolCount > 1) {
+        tags.push(`${pick.kolCount}位KOL看多`);
+      } else if (pick.consensus === '多方共識') {
+        tags.push('多方共識');
+      }
+      if (tags.length > 0) {
+        row.push({
+          type: 'text', text: tags.join('・'),
+          size: 'xxs', color: '#888888', margin: 'xs',
+        });
       }
 
       bodyContents.push({
@@ -170,7 +233,9 @@ async function main() {
 
   const today = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' });
   const subText = topPicks.length > 0
-    ? `近 24 小時偵測到 ${alertedStocks.length} 檔訊號`
+    ? hasStrongSignal
+      ? `近 24 小時偵測到 ${alertedStocks.length} 檔訊號`
+      : '近 24 小時無強烈訊號，以下為盤整觀察'
     : '近 24 小時無新訊號';
 
   const message: Flex = {

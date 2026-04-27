@@ -54,6 +54,14 @@ function repairJson(jsonStr: string): string {
     if (char === ']') openBrackets--;
   }
 
+  // Close unclosed string literal (truncated response)
+  if (inString) {
+    str += '"';
+  }
+
+  // Remove trailing comma or incomplete key-value pair before closing
+  str = str.replace(/,\s*$/, '');
+
   // Close any unclosed brackets/braces
   while (openBrackets > 0) {
     str += ']';
@@ -74,8 +82,8 @@ function parseJsonSafe(content: string): unknown {
   // Strip markdown code fences (```json ... ```)
   const cleaned = content.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
 
-  // Try to extract JSON from the response
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  // Try to extract JSON from the response (with or without closing brace for truncated responses)
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/) || cleaned.match(/\{[\s\S]*/);
   if (!jsonMatch) {
     throw new Error('No JSON object found in response');
   }
@@ -660,16 +668,19 @@ function normalizeConsolidatedReport(raw: Record<string, unknown>, totalEpisodes
 }
 
 // Quick digest prompt matching n8n workflow "AI 生成分析摘要"
+const MAX_RETRIES = 2;
+
 export async function generateQuickDigest(report: ConsolidatedReport): Promise<{ quickDigest: string[]; marketMood: string }> {
-  try {
-    const response = await openrouter.chat.completions.create({
-      model: PRO_MODEL,
-      max_tokens: 1000,
-      temperature: 0.3,
-      messages: [
-        {
-          role: 'system',
-          content: `你是一位專業的投資分析摘要師。你的任務是根據投資報告 JSON 生成兩段創意內容。
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: PRO_MODEL,
+        max_tokens: 1500,
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: `你是一位專業的投資分析摘要師。你的任務是根據投資報告 JSON 生成兩段創意內容。
 
 所有輸出必須使用繁體中文。
 
@@ -697,31 +708,39 @@ export async function generateQuickDigest(report: ConsolidatedReport): Promise<{
 - quickDigest 每個項目控制在 30 字以內
 - marketMood 控制在 25 字以內
 - 必須回傳有效的 JSON 格式`
-        },
-        {
-          role: 'user',
-          content: `以下是整合後的投資報告 JSON：
+          },
+          {
+            role: 'user',
+            content: `以下是整合後的投資報告 JSON：
 ${JSON.stringify(report, null, 2)}`
-        }
-      ],
-    });
+          }
+        ],
+      });
 
-    const content = response.choices[0]?.message?.content || '{}';
-    console.log('[generateQuickDigest] Raw AI response:', content);
+      const content = response.choices[0]?.message?.content || '{}';
+      console.log('[generateQuickDigest] Raw AI response:', content);
 
-    const parsed = parseJsonSafe(content) as Record<string, unknown>;
+      const parsed = parseJsonSafe(content) as Record<string, unknown>;
 
-    // Validate and ensure proper format
-    return {
-      quickDigest: Array.isArray(parsed.quickDigest) ? parsed.quickDigest :
-                   Array.isArray(parsed.quick_digest) ? parsed.quick_digest : [],
-      marketMood: typeof parsed.marketMood === 'string' ? parsed.marketMood :
-                  typeof parsed.market_mood === 'string' ? parsed.market_mood : '',
-    };
-  } catch (error) {
-    console.error('[generateQuickDigest] Error:', error);
-    return generateFallbackQuickDigest(report);
+      // Validate and ensure proper format
+      return {
+        quickDigest: Array.isArray(parsed.quickDigest) ? parsed.quickDigest :
+                     Array.isArray(parsed.quick_digest) ? parsed.quick_digest : [],
+        marketMood: typeof parsed.marketMood === 'string' ? parsed.marketMood :
+                    typeof parsed.market_mood === 'string' ? parsed.market_mood : '',
+      };
+    } catch (error) {
+      console.error(`[generateQuickDigest] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed:`, error);
+      if (attempt < MAX_RETRIES) {
+        const delay = 1000 * (attempt + 1);
+        console.log(`[generateQuickDigest] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  console.error('[generateQuickDigest] All retries exhausted, using fallback');
+  return generateFallbackQuickDigest(report);
 }
 
 /**

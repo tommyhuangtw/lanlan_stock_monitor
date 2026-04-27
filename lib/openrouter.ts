@@ -319,6 +319,7 @@ export async function analyzeTranscript(transcript: string, episodeTitle: string
         model: PRO_MODEL,
         max_tokens: 7000,
         temperature: 0.3,
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
@@ -542,37 +543,52 @@ export async function consolidateReports(
     })),
   };
 
-  const response = await openrouter.chat.completions.create({
-    model: PRO_MODEL,
-    max_tokens: 16000,
-    temperature: 0.2,
-    messages: [
-      {
-        role: 'system',
-        content: CONSOLIDATION_SYSTEM_PROMPT
-      },
-      {
-        role: 'user',
-        content: `今日日期: ${inputData.date}
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: PRO_MODEL,
+        max_tokens: 16000,
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: CONSOLIDATION_SYSTEM_PROMPT
+          },
+          {
+            role: 'user',
+            content: `今日日期: ${inputData.date}
 分析集數: ${inputData.totalEpisodes}
 
 以下是所有集數的分析結果 JSON：
 ${JSON.stringify(inputData, null, 2)}`
+          }
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content || '{}';
+
+      const rawReport = parseJsonSafe(content) as Record<string, unknown>;
+      const report = normalizeConsolidatedReport(rawReport, analyses.length);
+
+      console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
+      if (report.episodeSummaries.length === 0 && analyses.length > 0) {
+        console.warn('[consolidateReports] ⚠️ episodeSummaries is empty despite having input analyses!');
       }
-    ],
-  });
 
-  const content = response.choices[0]?.message?.content || '{}';
-
-  const rawReport = parseJsonSafe(content) as Record<string, unknown>;
-  const report = normalizeConsolidatedReport(rawReport, analyses.length);
-
-  console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
-  if (report.episodeSummaries.length === 0 && analyses.length > 0) {
-    console.warn('[consolidateReports] ⚠️ episodeSummaries is empty despite having input analyses!');
+      return report;
+    } catch (error) {
+      console.error(`[consolidateReports] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed:`, error);
+      if (attempt < MAX_RETRIES) {
+        const delay = 1000 * (attempt + 1);
+        console.log(`[consolidateReports] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
   }
-
-  return report;
+  throw new Error('Unreachable');
 }
 
 /**
@@ -693,6 +709,7 @@ export async function generateQuickDigest(report: ConsolidatedReport): Promise<{
         model: PRO_MODEL,
         max_tokens: 1500,
         temperature: 0.3,
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',

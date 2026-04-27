@@ -328,6 +328,7 @@ async function searchSectorStocks(theme: string, context: string): Promise<Secto
   try {
     const response = await openrouter.chat.completions.create({
       model: PRO_MODEL,
+      response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',

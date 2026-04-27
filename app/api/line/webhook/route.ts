@@ -121,17 +121,32 @@ function buildHelpMessage(): Msg {
     text: [
       '📋 可用指令：',
       '',
-      '清單 → 查看入場機會 + 追蹤股票',
+      '清單 → 入場機會 + 所有追蹤股票',
+      'KOL → 查看所有 KOL 列表',
       '說明 → 顯示此說明',
       '',
-      '🔍 查個股：直接輸入股票代號',
-      '  例：TSLA、2330、台積電',
+      '🔍 查個股：直接輸入代號或名稱',
+      '  例：TSLA、2330、台積電、TSMC',
       '',
       '📣 查 KOL：輸入 @KOL名稱',
       '  例：@股癌、@NaNa',
       '',
-      '💡 輸入「KOL」查看所有 KOL 列表',
-      '💡 輸入「清單」查看所有追蹤股票',
+      '───────────',
+      '📖 系統運作說明',
+      '',
+      '追蹤股票來源：',
+      '• KOL podcast 中提到看多的股票',
+      '• AI 自動擴展相關產業概念股',
+      '',
+      '入場機會分數：',
+      '• 技術訊號（回檔、RSI超賣、均線支撐等）',
+      '• KOL 共識越多 → 分數越高',
+      '• 訊號越新 → 分數越高',
+      '',
+      '市場熱度（RSI 0-100）：',
+      '• 0-30 偏冷（可能接近低點）',
+      '• 30-60 中性',
+      '• 60-100 偏熱（追高風險大）',
     ].join('\n'),
   };
 }
@@ -227,6 +242,52 @@ function extractKolKeyword(name: string): string {
 // STOCK LOOKUP
 // ============================================================
 
+/** Format "2026-04-18" → " 4/18", empty string if no date */
+function formatShortDate(dateStr: string): string {
+  if (!dateStr || dateStr === 'unknown') return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return ` ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// Common English aliases for stocks (uppercase keys)
+const TICKER_ALIASES: Record<string, string> = {
+  'TSMC': '2330.TW',
+  '聯發科': '2454.TW',
+  '鴻海': '2317.TW',
+};
+
+// Normalize common traditional/simplified Chinese character differences
+function normalizeChineseChars(text: string): string {
+  const map: Record<string, string> = { '臺': '台', '積': '積', '體': '體' };
+  return text.replace(/[臺]/g, c => map[c] || c);
+}
+
+function matchesStock(
+  s: { ticker: string; ticker_normalized: string; name: string | null },
+  query: string,
+  qUpper: string,
+): boolean {
+  // Exact normalized match
+  if (s.ticker_normalized === qUpper) return true;
+  // TW number shorthand: "2330" → "2330.TW"
+  if (s.ticker_normalized === `${qUpper}.TW`) return true;
+  // Exact ticker match
+  if (s.ticker === query) return true;
+  // Name contains query (case-insensitive, with Chinese normalization)
+  if (s.name) {
+    const normName = normalizeChineseChars(s.name).toLowerCase();
+    const normQuery = normalizeChineseChars(query).toLowerCase();
+    if (normName.includes(normQuery)) return true;
+  }
+  // Ticker contains query (e.g. query "台積電" matches ticker "台積電 (2330)")
+  if (normalizeChineseChars(s.ticker).toLowerCase().includes(normalizeChineseChars(query).toLowerCase())) return true;
+  // Alias match (e.g. "TSMC" → "2330.TW")
+  const aliasTarget = TICKER_ALIASES[qUpper];
+  if (aliasTarget && s.ticker_normalized === aliasTarget) return true;
+  return false;
+}
+
 async function buildStockReply(query: string): Promise<Msg[] | null> {
   const q = query.toUpperCase().trim();
 
@@ -237,10 +298,7 @@ async function buildStockReply(query: string): Promise<Msg[] | null> {
     .eq('status', 'active');
 
   const stock = (stocks || []).find((s: { ticker: string; ticker_normalized: string; name: string | null }) =>
-    s.ticker_normalized === q ||
-    s.ticker_normalized === `${q}.TW` ||
-    s.ticker === query ||
-    (s.name && s.name.includes(query))
+    matchesStock(s, query, q)
   );
 
   if (stock) {
@@ -315,16 +373,16 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
   }
 
   // KOL opinions
-  const kolSources = (stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string }>;
+  const kolSources = (stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>;
   if (kolSources.length > 0) {
     body.push({ type: 'separator', margin: 'lg' });
     body.push({ type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' });
 
     // Deduplicate by KOL name, keep latest
-    const kolMap = new Map<string, { kol: string; reason: string; sentiment: string }>();
+    const kolMap = new Map<string, { kol: string; reason: string; sentiment: string; date: string }>();
     for (const k of kolSources) {
       if (!kolMap.has(k.kol)) {
-        kolMap.set(k.kol, { kol: k.kol, reason: k.reason, sentiment: k.sentiment || 'bullish' });
+        kolMap.set(k.kol, { kol: k.kol, reason: k.reason, sentiment: k.sentiment || 'bullish', date: k.date || '' });
       }
     }
 
@@ -332,9 +390,10 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     for (const k of uniqueKols) {
       const icon = SENTIMENT_ICON[k.sentiment] || '📣';
       const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
+      const dateStr = formatShortDate(k.date);
       body.push({
         type: 'text',
-        text: `${icon} ${k.kol}(${sentLabel})：${k.reason.slice(0, 60)}`,
+        text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason.slice(0, 50)}`,
         size: 'xs', color: '#555555', wrap: true, margin: 'sm',
       });
     }
@@ -383,9 +442,10 @@ interface KolOpinion {
 
 async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
   const q = query.toUpperCase().trim();
+  const normQuery = normalizeChineseChars(query).toLowerCase();
   const { data: analyses } = await supabaseAdmin
     .from('analyses')
-    .select('full_analysis')
+    .select('full_analysis, created_at')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -398,12 +458,22 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
     const fa = a.full_analysis as { podcastName?: string; signals?: Array<{ ticker: string; type: string; reason: string }> } | null;
     if (!fa?.signals || !fa.podcastName) continue;
 
+    const date = a.created_at ? a.created_at.split('T')[0] : '';
+
     for (const sig of fa.signals) {
       if (!sig.ticker) continue;
       const ticker = sig.ticker.toUpperCase();
-      // Match: exact ticker, contains TW number, or contains query
+      const normTicker = normalizeChineseChars(sig.ticker).toLowerCase();
+      // Match: exact ticker, contains TW number, contains query, or alias
       const twNum = q.replace('.TW', '');
-      if (ticker !== q && !ticker.includes(q) && !ticker.includes(twNum) && !sig.ticker.includes(query)) continue;
+      const aliasTarget = TICKER_ALIASES[q];
+      if (
+        ticker !== q &&
+        !ticker.includes(q) &&
+        !ticker.includes(twNum) &&
+        !normTicker.includes(normQuery) &&
+        !(aliasTarget && ticker.includes(aliasTarget.replace('.TW', '')))
+      ) continue;
 
       const key = `${fa.podcastName}|${sig.type}`;
       if (seen.has(key)) continue;
@@ -413,7 +483,7 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
         kol: fa.podcastName,
         sentiment: sig.type,
         reason: sig.reason || '',
-        date: '',
+        date,
       });
     }
   }
@@ -431,9 +501,10 @@ async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): 
   for (const k of opinions.slice(0, 5)) {
     const icon = SENTIMENT_ICON[k.sentiment] || '📣';
     const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
+    const dateStr = formatShortDate(k.date);
     body.push({
       type: 'text',
-      text: `${icon} ${k.kol}(${sentLabel})：${k.reason.slice(0, 60)}`,
+      text: `${icon} ${k.kol}(${sentLabel})${dateStr}：${k.reason.slice(0, 50)}`,
       size: 'xs', color: '#555555', wrap: true, margin: 'sm',
     });
   }

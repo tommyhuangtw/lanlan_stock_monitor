@@ -295,11 +295,34 @@ function kolPriority(kolName: string): number {
   return PRIORITY_KOLS.length;
 }
 
-// Common English aliases for stocks (uppercase keys)
+// Common aliases for stocks (uppercase keys → ticker_normalized)
 const TICKER_ALIASES: Record<string, string> = {
-  'TSMC': '2330.TW',
-  '聯發科': '2454.TW',
-  '鴻海': '2317.TW',
+  // US stocks — common names
+  'GOOGLE': 'GOOGL', 'ALPHABET': 'GOOGL',
+  'AMAZON': 'AMZN',
+  'TESLA': 'TSLA',
+  'NVIDIA': 'NVDA', '輝達': 'NVDA',
+  'MICROSOFT': 'MSFT', '微軟': 'MSFT',
+  'META': 'META', 'FACEBOOK': 'META', 'FB': 'META',
+  'NETFLIX': 'NFLX',
+  'INTEL': 'INTC',
+  'BOEING': 'BA', '波音': 'BA',
+  'BROADCOM': 'AVGO', '博通': 'AVGO',
+  'MICRON': 'MU', '美光': 'MU',
+  'MARVELL': 'MRVL',
+  // TW stocks — common names
+  'TSMC': '2330.TW', '台積': '2330.TW',
+  '聯發科': '2454.TW', 'MEDIATEK': '2454.TW',
+  '台達電': '2308.TW', '台達': '2308.TW', 'DELTA': '2308.TW',
+  '創意': '3443.TW', '創意電子': '3443.TW',
+  '智原': '3035.TW',
+  '欣興': '3037.TW', '欣興電子': '3037.TW',
+  '奇鋐': '3017.TW',
+  '景碩': '3189.TW',
+  '八方雲集': '2753.TW', '八方': '2753.TW',
+  '聯亞': '3081.TW',
+  '雙鴻': '3324.TW',
+  '鴻海': '2317.TW', 'FOXCONN': '2317.TW',
 };
 
 // Normalize common traditional/simplified Chinese character differences

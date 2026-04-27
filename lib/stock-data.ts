@@ -5,8 +5,8 @@
  * Supports both US stocks (e.g. "AAPL") and Taiwan stocks (e.g. "2330.TW").
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+const yahooFinance = new YahooFinance();
 import { supabaseAdmin } from './supabase';
 import { log } from './logger';
 

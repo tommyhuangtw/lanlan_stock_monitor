@@ -2,12 +2,14 @@ name: Stock Price Monitor
 
 on:
   schedule:
-    # After Taiwan market close (13:30 TWN = 05:30 UTC), run at 05:35 UTC
-    - cron: '35 5 * * 1-5'
-    # US market midday check (10:00 ET = 14:00 UTC during EDT)
-    - cron: '0 14 * * 1-5'
-    # After US market close (16:00 ET = 21:00 UTC during EDT), run at 21:05 UTC
-    - cron: '5 21 * * 1-5'
+    # TW pre-market: 07:00 TWN = 23:00 UTC (previous day), 2hr before open
+    - cron: '0 23 * * 0-4'
+    # TW post-open: 11:00 TWN = 03:00 UTC, 2hr after open
+    - cron: '0 3 * * 1-5'
+    # US pre-market: 07:30 ET = 11:30 UTC, 2hr before open
+    - cron: '30 11 * * 1-5'
+    # US post-open: 11:30 ET = 15:30 UTC, 2hr after open
+    - cron: '30 15 * * 1-5'
   workflow_dispatch:
     inputs:
       market:
@@ -44,10 +46,10 @@ jobs:
           # For scheduled runs, determine market based on time
           if [ "${{ github.event_name }}" = "schedule" ]; then
             HOUR=$(date -u +%H)
-            if [ "$HOUR" = "05" ]; then
+            if [ "$HOUR" = "23" ] || [ "$HOUR" = "03" ]; then
               echo "filter=TW" >> $GITHUB_OUTPUT
-              echo "Running TW market check (post Taiwan close)"
-            elif [ "$HOUR" = "14" ] || [ "$HOUR" = "21" ]; then
+              echo "Running TW market check"
+            elif [ "$HOUR" = "11" ] || [ "$HOUR" = "15" ]; then
               echo "filter=US" >> $GITHUB_OUTPUT
               echo "Running US market check"
             else

@@ -146,10 +146,7 @@ function withQuickReply(messages: Msg[]): Msg[] {
   last.quickReply = {
     items: [
       { type: 'action', action: { type: 'message', label: '🎯 機會', text: '/機會' } },
-      { type: 'action', action: { type: 'message', label: '📣 股癌', text: '/@股癌' } },
-      { type: 'action', action: { type: 'message', label: '📣 財經號角', text: '/@財經號角' } },
-      { type: 'action', action: { type: 'message', label: '📣 NaNa', text: '/@NaNa' } },
-      { type: 'action', action: { type: 'message', label: '📣 航海王', text: '/@航海王' } },
+      { type: 'action', action: { type: 'message', label: '📣 KOL', text: '/kol' } },
       { type: 'action', action: { type: 'message', label: '📋 清單', text: '/清單' } },
       { type: 'action', action: { type: 'message', label: '❓ 說明', text: '/說明' } },
     ],
@@ -202,6 +199,9 @@ function buildHelpMessage(): Msg {
 // KOL LIST
 // ============================================================
 
+// Featured KOLs that get tappable buttons (others stay as text)
+const FEATURED_KOL_KEYWORDS = new Set(['股癌', '財經皓角', '財女珍妮', '韭菜畢業班', '航海王']);
+
 async function buildKolListReply(): Promise<Msg[]> {
   const { data: sources } = await supabaseAdmin
     .from('sources')
@@ -226,13 +226,24 @@ async function buildKolListReply(): Promise<Msg[]> {
       margin: body.length > 0 ? 'lg' : 'none',
     });
     for (const item of items) {
-      // Extract a short keyword from the full name for the query hint
       const shortName = extractKolKeyword(item.name);
-      body.push({
-        type: 'text',
-        text: `• ${item.name}\n  → 輸入 @${shortName}`,
-        size: 'xs', color: '#555555', wrap: true, margin: 'sm',
-      });
+      if (FEATURED_KOL_KEYWORDS.has(shortName)) {
+        // Tappable button for featured KOLs
+        body.push({
+          type: 'button',
+          style: 'secondary',
+          height: 'sm',
+          margin: 'sm',
+          action: { type: 'message', label: `📣 ${shortName}`, text: `/@${shortName}` },
+        });
+      } else {
+        // Plain text for other KOLs
+        body.push({
+          type: 'text',
+          text: `• ${item.name}  → 輸入 @${shortName}`,
+          size: 'xs', color: '#555555', wrap: true, margin: 'sm',
+        });
+      }
     }
   };
 
@@ -259,7 +270,7 @@ async function buildKolListReply(): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: '輸入 @名稱 查看該 KOL 近期觀點', size: 'xxs', color: '#AAAAAA', align: 'center' },
+          { type: 'text', text: '點按鈕查看觀點，或輸入 @名稱', size: 'xxs', color: '#AAAAAA', align: 'center' },
         ],
       },
     },

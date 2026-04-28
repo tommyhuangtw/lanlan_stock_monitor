@@ -33,6 +33,7 @@ const SENTIMENT_ICON: Record<string, string> = {
  *
  * Commands:
  * - /說明, /help, /指令 → usage guide
+ * - /機會 → KOL bullish stocks at attractive technical levels
  * - /清單, /追蹤 → watchlist with entry opportunities
  * - /kol → list all available KOLs
  * - @KOL名稱 → KOL recent opinions
@@ -76,26 +77,32 @@ export async function POST(request: NextRequest) {
 
     // Command: 說明 / help / 指令
     if (cmdLower === '說明' || cmdLower === 'help' || cmdLower === '指令') {
-      await replyMessage(token, event.replyToken, [buildHelpMessage()]);
+      await replyMessage(token, event.replyToken, withQuickReply([buildHelpMessage()]));
       continue;
     }
 
     // Command: 清單 / 追蹤
     if (cmdLower === '清單' || cmdLower === '追蹤') {
-      await replyMessage(token, event.replyToken, await buildWatchlistReply());
+      await replyMessage(token, event.replyToken, withQuickReply(await buildWatchlistReply()));
       continue;
     }
 
     // Command: KOL list
     if (cmdLower === 'kol') {
-      await replyMessage(token, event.replyToken, await buildKolListReply());
+      await replyMessage(token, event.replyToken, withQuickReply(await buildKolListReply()));
+      continue;
+    }
+
+    // Command: 機會 / opportunity
+    if (cmdLower === '機會' || cmdLower === 'opportunity') {
+      await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply()));
       continue;
     }
 
     // Command: @KOL名稱 (works with both "@股癌" and "/@股癌")
     if (cmdText.startsWith('@') && cmdText.length > 1) {
       const kolName = cmdText.slice(1).trim();
-      await replyMessage(token, event.replyToken, await buildKolReply(kolName));
+      await replyMessage(token, event.replyToken, withQuickReply(await buildKolReply(kolName)));
       continue;
     }
 
@@ -130,6 +137,27 @@ async function replyMessage(token: string, replyToken: string, messages: Msg[]) 
 }
 
 // ============================================================
+// QUICK REPLY HELPER
+// ============================================================
+
+function withQuickReply(messages: Msg[]): Msg[] {
+  if (messages.length === 0) return messages;
+  const last = messages[messages.length - 1];
+  last.quickReply = {
+    items: [
+      { type: 'action', action: { type: 'message', label: '🎯 機會', text: '/機會' } },
+      { type: 'action', action: { type: 'message', label: '📣 股癌', text: '/@股癌' } },
+      { type: 'action', action: { type: 'message', label: '📣 財經號角', text: '/@財經號角' } },
+      { type: 'action', action: { type: 'message', label: '📣 NaNa', text: '/@NaNa' } },
+      { type: 'action', action: { type: 'message', label: '📣 航海王', text: '/@航海王' } },
+      { type: 'action', action: { type: 'message', label: '📋 清單', text: '/清單' } },
+      { type: 'action', action: { type: 'message', label: '❓ 說明', text: '/說明' } },
+    ],
+  };
+  return messages;
+}
+
+// ============================================================
 // HELP / 說明
 // ============================================================
 
@@ -139,6 +167,7 @@ function buildHelpMessage(): Msg {
     text: [
       '📋 可用指令（需加 / 前綴）：',
       '',
+      '/機會 → KOL 看好 + 技術面偏低的股票',
       '/清單 → 入場機會 + 所有追蹤股票',
       '/kol → 查看所有 KOL 列表',
       '/說明 → 顯示此說明',
@@ -661,6 +690,154 @@ async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): 
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
           { type: 'text', text: '此股票未被系統自動追蹤', size: 'xxs', color: '#AAAAAA', align: 'center' },
+        ],
+      },
+    },
+  }];
+}
+
+// ============================================================
+// 機會 (OPPORTUNITY) — KOL bullish stocks at attractive levels
+// ============================================================
+
+async function buildOpportunityReply(): Promise<Msg[]> {
+  // Get recent alerts (last 7 days) — stocks already flagged as good entry points
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const { data: alerts } = await supabaseAdmin
+    .from('stock_alerts')
+    .select('ticker, market, alert_type, trigger_reason, trigger_price, technical_snapshot, kol_context, watchlist_stock_id, created_at')
+    .gte('created_at', sevenDaysAgo.toISOString())
+    .in('status', ['pending', 'sent'])
+    .order('created_at', { ascending: false });
+
+  if (!alerts || alerts.length === 0) {
+    return [{ type: 'text', text: '🎯 近 7 日沒有偵測到進場機會。\n\n系統每日掃描追蹤股票的技術訊號（回檔、RSI超賣、均線支撐等），有機會時會自動通知。' }];
+  }
+
+  // Get watchlist stocks for KOL context enrichment
+  const stockIds = [...new Set(alerts.map(a => a.watchlist_stock_id))];
+  const { data: stocks } = await supabaseAdmin
+    .from('watchlist_stocks')
+    .select('id, ticker, market, kol_sources, consensus')
+    .in('id', stockIds);
+
+  const stockMap = new Map((stocks || []).map(s => [s.id, s]));
+
+  // Deduplicate by ticker, aggregate alert types, pick best info
+  interface OpportunityItem {
+    ticker: string;
+    market: string;
+    alertTypes: Set<string>;
+    triggerReason: string;
+    triggerPrice: number;
+    rsi: number | null;
+    dropPct: number | null;
+    kolName: string;
+    kolDate: string;
+    score: number;
+  }
+
+  const tickerMap = new Map<string, OpportunityItem>();
+
+  for (const alert of alerts) {
+    const existing = tickerMap.get(alert.ticker);
+    const snapshot = alert.technical_snapshot as { rsi14?: number; dropFrom20dHigh?: number } | null;
+    const kolCtx = (alert.kol_context as Array<{ kol: string; date: string }>) || [];
+    const stock = stockMap.get(alert.watchlist_stock_id);
+    const kolSources = (stock?.kol_sources as Array<{ kol: string; date: string; confidence: string }>) || [];
+
+    // Only include stocks with bullish KOL backing
+    const hasBullishKol = kolSources.length > 0;
+    if (!hasBullishKol) continue;
+
+    const alertScore = ALERT_TYPE_CONFIG[alert.alert_type]?.score || 5;
+    const kolName = kolCtx[0]?.kol || kolSources[0]?.kol || '';
+    const kolDate = kolCtx[0]?.date || kolSources[0]?.date || '';
+
+    if (existing) {
+      existing.alertTypes.add(alert.alert_type);
+      existing.score += alertScore;
+    } else {
+      tickerMap.set(alert.ticker, {
+        ticker: alert.ticker,
+        market: alert.market,
+        alertTypes: new Set([alert.alert_type]),
+        triggerReason: alert.trigger_reason,
+        triggerPrice: alert.trigger_price,
+        rsi: snapshot?.rsi14 ?? null,
+        dropPct: snapshot?.dropFrom20dHigh ?? null,
+        kolName,
+        kolDate: kolDate ? formatShortDate(kolDate) : '',
+        score: alertScore,
+      });
+    }
+  }
+
+  // Sort by score descending
+  const opportunities = [...tickerMap.values()].sort((a, b) => b.score - a.score).slice(0, 8);
+
+  if (opportunities.length === 0) {
+    return [{ type: 'text', text: '🎯 近 7 日有技術訊號但沒有 KOL 看多的標的。\n\n輸入 /清單 查看所有追蹤股票。' }];
+  }
+
+  // Build flex bubble
+  const body: Msg[] = [];
+
+  for (const opp of opportunities) {
+    const marketFlag = opp.market === 'TW' ? '🇹🇼' : '🇺🇸';
+    const kolInfo = opp.kolName ? `${opp.kolName}${opp.kolDate} 看好` : '';
+
+    body.push({
+      type: 'text',
+      text: `${marketFlag} ${opp.ticker}${kolInfo ? `（${kolInfo}）` : ''}`,
+      size: 'sm', weight: 'bold', color: '#333333',
+      margin: body.length > 0 ? 'md' : 'none',
+    });
+
+    // Technical summary line
+    const details: string[] = [];
+    if (opp.triggerPrice) details.push(`$${opp.triggerPrice.toFixed(2)}`);
+    if (opp.rsi !== null) details.push(`RSI ${opp.rsi.toFixed(0)}`);
+    if (opp.dropPct !== null && opp.dropPct < -3) details.push(`${opp.dropPct.toFixed(0)}%`);
+
+    // Alert type labels
+    const labels = [...opp.alertTypes]
+      .map(t => ALERT_TYPE_CONFIG[t]?.label)
+      .filter(Boolean)
+      .slice(0, 3);
+
+    body.push({
+      type: 'text',
+      text: `  ${details.join(' | ')}${labels.length > 0 ? ` • ${labels.join('、')}` : ''}`,
+      size: 'xxs', color: '#888888', wrap: true, margin: 'none',
+    });
+  }
+
+  const totalStocks = stockIds.length;
+
+  return [{
+    type: 'flex',
+    altText: `🎯 進場機會（${opportunities.length} 檔）`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#1B5E20', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '🎯 進場機會', size: 'lg', weight: 'bold', color: '#ffffff' },
+          { type: 'text', text: 'KOL 看好 + 技術面訊號', size: 'xs', color: '#ffffffcc' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none',
+        contents: body,
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '10px',
+        contents: [
+          { type: 'text', text: `近 7 日訊號 | 共掃描 ${totalStocks} 檔追蹤股`, size: 'xxs', color: '#AAAAAA', align: 'center' },
         ],
       },
     },

@@ -683,24 +683,44 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
     return [{ type: 'text', text: `找不到 ${kolName} 的觀點資料。` }];
   }
 
-  interface StockOpinion { ticker: string; sentiment: string; reason: string; date: string }
+  interface StockOpinion {
+    ticker: string; sentiment: string; reason: string; date: string;
+    action?: string; confidence?: string; timeHorizon?: string; priceLevel?: string;
+  }
   const bullish: StockOpinion[] = [];
   const bearish: StockOpinion[] = [];
   const monitor: StockOpinion[] = [];
   const seenTickers = new Set<string>();
+  const allDates: string[] = [];
+
+  // Find the actual KOL name from the data (do this first for header)
+  let actualKolName = kolName;
 
   for (const a of analyses) {
-    const fa = a.full_analysis as { podcastName?: string; signals?: Array<{ ticker: string; type: string; reason: string }> } | null;
+    const fa = a.full_analysis as {
+      podcastName?: string;
+      signals?: Array<{
+        ticker: string; type: string; reason: string;
+        action?: string; confidence?: string; timeHorizon?: string; priceLevel?: string;
+      }>;
+    } | null;
     if (!fa?.signals || !fa.podcastName) continue;
     if (!fa.podcastName.toLowerCase().includes(kolName.toLowerCase())) continue;
 
+    if (actualKolName === kolName) actualKolName = fa.podcastName;
+
     const date = a.created_at ? new Date(a.created_at).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }) : '';
+    if (date) allDates.push(date);
 
     for (const sig of fa.signals) {
       if (!sig.ticker || seenTickers.has(`${sig.ticker}|${sig.type}`)) continue;
       seenTickers.add(`${sig.ticker}|${sig.type}`);
 
-      const item = { ticker: sig.ticker, sentiment: sig.type, reason: sig.reason || '', date };
+      const item: StockOpinion = {
+        ticker: sig.ticker, sentiment: sig.type, reason: sig.reason || '', date,
+        action: sig.action, confidence: sig.confidence,
+        timeHorizon: sig.timeHorizon, priceLevel: sig.priceLevel,
+      };
       if (sig.type === 'bullish') bullish.push(item);
       else if (sig.type === 'bearish') bearish.push(item);
       else monitor.push(item);
@@ -713,18 +733,32 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
 
   const body: Msg[] = [];
 
+  const confidenceMap: Record<string, string> = { high: '高', medium: '中', low: '低' };
+  const timeHorizonMap: Record<string, string> = { short: '短線', medium: '中線', long: '長線' };
+
   const addSection = (title: string, items: StockOpinion[], color: string) => {
     if (items.length === 0) return;
     body.push({
       type: 'text', text: `${title}（${items.length} 檔）`, size: 'sm', weight: 'bold', color, margin: body.length > 0 ? 'lg' : 'none',
     });
-    for (const item of items.slice(0, 5)) {
+    for (const item of items.slice(0, 8)) {
       body.push({
-        type: 'text', text: `• ${item.ticker}：${item.reason}`, size: 'xs', color: '#555555', wrap: true, margin: 'xs',
+        type: 'text', text: `• ${item.ticker}（${item.date}）：${item.reason}`, size: 'xs', color: '#555555', wrap: true, margin: 'xs',
       });
+      // Detail line: action, confidence, timeHorizon, priceLevel
+      const details: string[] = [];
+      if (item.action) details.push(item.action);
+      if (item.confidence) details.push(`信心${confidenceMap[item.confidence] || item.confidence}`);
+      if (item.timeHorizon) details.push(timeHorizonMap[item.timeHorizon] || item.timeHorizon);
+      if (item.priceLevel) details.push(`目標 ${item.priceLevel}`);
+      if (details.length > 0) {
+        body.push({
+          type: 'text', text: `  ${details.join(' | ')}`, size: 'xxs', color: '#888888', wrap: true, margin: 'none',
+        });
+      }
     }
-    if (items.length > 5) {
-      body.push({ type: 'text', text: `...還有 ${items.length - 5} 檔`, size: 'xxs', color: '#AAAAAA', margin: 'xs' });
+    if (items.length > 8) {
+      body.push({ type: 'text', text: `...還有 ${items.length - 8} 檔`, size: 'xxs', color: '#AAAAAA', margin: 'xs' });
     }
   };
 
@@ -732,15 +766,10 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
   addSection('👀 觀望', monitor, '#F57F17');
   addSection('📉 看空', bearish, '#B71C1C');
 
-  // Find the actual KOL name from the data
-  let actualKolName = kolName;
-  for (const a of analyses) {
-    const fa = a.full_analysis as { podcastName?: string } | null;
-    if (fa?.podcastName?.toLowerCase().includes(kolName.toLowerCase())) {
-      actualKolName = fa.podcastName;
-      break;
-    }
-  }
+  // Date range for footer
+  const dateRange = allDates.length > 0
+    ? `${allDates[allDates.length - 1]} ~ ${allDates[0]}`
+    : '近 2 個月';
 
   return [{
     type: 'flex',
@@ -762,7 +791,7 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: '資料來源：近期 podcast 分析', size: 'xxs', color: '#AAAAAA', align: 'center' },
+          { type: 'text', text: `資料來源：podcast 分析（${dateRange}）`, size: 'xxs', color: '#AAAAAA', align: 'center' },
         ],
       },
     },

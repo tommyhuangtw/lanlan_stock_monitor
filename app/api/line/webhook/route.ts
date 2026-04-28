@@ -360,8 +360,8 @@ const TICKER_ALIASES: Record<string, string> = {
   '奇鋐': '3017.TW',
   '景碩': '3189.TW',
   '八方雲集': '2753.TW', '八方': '2753.TW',
-  '聯亞': '3081.TW',
-  '雙鴻': '3324.TW',
+  '聯亞': '3081.TWO',
+  '雙鴻': '3324.TWO',
   '鴻海': '2317.TW', 'FOXCONN': '2317.TW',
 };
 
@@ -378,8 +378,8 @@ function matchesStock(
 ): boolean {
   // Exact normalized match
   if (s.ticker_normalized === qUpper) return true;
-  // TW number shorthand: "2330" → "2330.TW"
-  if (s.ticker_normalized === `${qUpper}.TW`) return true;
+  // TW number shorthand: "2330" → "2330.TW" or "3324" → "3324.TWO"
+  if (s.ticker_normalized === `${qUpper}.TW` || s.ticker_normalized === `${qUpper}.TWO`) return true;
   // Exact ticker match
   if (s.ticker === query) return true;
   // Name contains query (case-insensitive, with Chinese normalization)
@@ -635,14 +635,14 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
       const ticker = sig.ticker.toUpperCase();
       const normTicker = normalizeChineseChars(sig.ticker).toLowerCase();
       // Match: exact ticker, contains TW number, contains query, or alias
-      const twNum = q.replace('.TW', '');
+      const twNum = q.replace(/\.TWO?$/, '');
       const aliasTarget = TICKER_ALIASES[q];
       if (
         ticker !== q &&
         !ticker.includes(q) &&
         !ticker.includes(twNum) &&
         !normTicker.includes(normQuery) &&
-        !(aliasTarget && ticker.includes(aliasTarget.replace('.TW', '')))
+        !(aliasTarget && ticker.includes(aliasTarget.replace(/\.TWO?$/, '')))
       ) continue;
 
       const key = `${fa.podcastName}|${sig.type}`;

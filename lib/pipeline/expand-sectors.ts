@@ -10,7 +10,7 @@
 
 import { supabaseAdmin } from '../supabase';
 import { openrouter, PRO_MODEL, SectorTheme } from '../openrouter';
-import { normalizeTicker, isAllowedTicker } from '../ticker-utils';
+import { normalizeTicker, isAllowedTicker, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
 import type { NewWatchlistStock } from '../notifications/line';
 
@@ -162,6 +162,9 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
         try {
           const normalized = normalizeTicker(stock.ticker);
           if (!normalized) continue;
+
+          // Resolve .TW vs .TWO for Taiwan stocks
+          normalized.normalized = await resolveYahooTicker(normalized.normalized);
 
           // Check if already in watchlist
           const { data: existing } = await supabaseAdmin

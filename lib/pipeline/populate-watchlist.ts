@@ -8,7 +8,7 @@
  */
 
 import { supabaseAdmin } from '../supabase';
-import { normalizeTicker, parsePriceLevels } from '../ticker-utils';
+import { normalizeTicker, parsePriceLevels, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
 import type { NewWatchlistStock } from '../notifications/line';
 
@@ -225,6 +225,9 @@ async function upsertWatchlistStock(
   },
   results: PopulateWatchlistResult
 ): Promise<void> {
+  // Resolve .TW vs .TWO for Taiwan stocks
+  params.tickerNormalized = await resolveYahooTicker(params.tickerNormalized);
+
   // Check if stock already exists
   const { data: existing } = await supabaseAdmin
     .from('watchlist_stocks')

@@ -1,7 +1,12 @@
 /**
  * Ticker normalization utilities for Taiwan and US stock markets.
  * Converts display tickers (e.g. "台積電 (2330)") to API-compatible format (e.g. "2330.TW").
+ * Supports both listed (.TW) and OTC (.TWO) Taiwan stocks.
  */
+
+import YahooFinance from 'yahoo-finance2';
+
+const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 export interface NormalizedTicker {
   display: string;       // Original display form: "台積電 (2330)" or "AAPL"
@@ -22,12 +27,12 @@ export interface NormalizedTicker {
 export function normalizeTicker(ticker: string): NormalizedTicker | null {
   const t = ticker.trim();
 
-  // Already normalized TW format: "2330.TW"
-  const twNormMatch = t.match(/^(\d{4,})\.TW$/i);
+  // Already normalized TW format: "2330.TW" or "3324.TWO"
+  const twNormMatch = t.match(/^(\d{4,})\.(TW|TWO)$/i);
   if (twNormMatch) {
     return {
       display: t,
-      normalized: `${twNormMatch[1]}.TW`,
+      normalized: `${twNormMatch[1]}.${twNormMatch[2].toUpperCase()}`,
       market: 'TW',
       symbol: twNormMatch[1],
     };
@@ -74,8 +79,8 @@ export function isAllowedTicker(ticker: string): boolean {
   if (/^[A-Z]{1,5}$/.test(t)) return true;
   // Chinese characters without TW-style code = likely CN/HK stock — blocked
   if (/[\u4e00-\u9fff]/.test(t) && !/[（(]\d{4,}[）)]/.test(t)) return false;
-  // Already normalized TW format
-  if (/^\d{4,}\.TW$/i.test(t)) return true;
+  // Already normalized TW format (.TW or .TWO)
+  if (/^\d{4,}\.TWO?$/i.test(t)) return true;
   // Default: block unknown formats
   return false;
 }
@@ -112,4 +117,34 @@ export function parsePriceLevels(priceLevel: string, kol: string, date: string):
   }
 
   return levels;
+}
+
+/** Check if a ticker is a Taiwan stock (.TW or .TWO). */
+export function isTWStock(ticker: string): boolean {
+  return /\.TWO?$/i.test(ticker);
+}
+
+/** Extract the numeric part from a TW ticker: "3324.TWO" → "3324" */
+export function twTickerNumber(ticker: string): string {
+  return ticker.replace(/\.TWO?$/i, '');
+}
+
+/**
+ * Resolve correct Yahoo Finance suffix for Taiwan stocks (.TW vs .TWO).
+ * Uses Yahoo Finance search API to determine if a stock is listed or OTC.
+ */
+export async function resolveYahooTicker(tickerNormalized: string): Promise<string> {
+  if (!tickerNormalized.endsWith('.TW')) return tickerNormalized;
+
+  const num = twTickerNumber(tickerNormalized);
+  try {
+    const result = await (yf.search(tickerNormalized) as Promise<{ quotes?: Array<{ symbol?: string }> }>);
+    const match = result?.quotes?.find(
+      q => q.symbol === `${num}.TW` || q.symbol === `${num}.TWO`
+    );
+    if (match?.symbol) return match.symbol;
+  } catch {
+    // fallback to original
+  }
+  return tickerNormalized;
 }

@@ -8,6 +8,7 @@
 import { openrouter, FLASH_MODEL } from './openrouter';
 import { supabaseAdmin } from './supabase';
 import { log } from './logger';
+import { isTWStock, twTickerNumber } from './ticker-utils';
 
 /**
  * Generate aliases for a stock using AI and save to database.
@@ -40,8 +41,8 @@ async function generateAliases(
   tickerNormalized: string,
   name: string | null,
 ): Promise<string[]> {
-  const market = tickerNormalized.endsWith('.TW') ? 'TW' : 'US';
-  const tickerNum = tickerNormalized.replace('.TW', '');
+  const market = isTWStock(tickerNormalized) ? 'TW' : 'US';
+  const tickerNum = twTickerNumber(tickerNormalized);
 
   const prompt = market === 'TW'
     ? `股票代號 ${tickerNormalized}${name ? `（公司名：${name}）` : ''}。

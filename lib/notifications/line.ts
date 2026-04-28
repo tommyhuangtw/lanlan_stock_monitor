@@ -14,11 +14,18 @@ export interface NewWatchlistStock {
   market: 'US' | 'TW';
   name: string | null;
   addedBy: 'pipeline' | 'sector_expansion';
-  kolSources: Array<{ kol: string; reason: string }>;
+  kolSources: Array<{ kol: string; reason: string; date?: string }>;
   sectorTheme?: string;
 }
 
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/push';
+
+function formatShortDate(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type FlexComponent = Record<string, any>;
@@ -162,9 +169,12 @@ function buildAlertBubble(result: DetectionResult): FlexComponent {
       type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm',
       contents: [
         { type: 'text', text: '📣 KOL 觀點', size: 'xs', weight: 'bold', color: '#999999' },
-        ...kolContext.slice(0, 2).map(k => ({
-          type: 'text', text: `• ${k.kol}：${k.reason.slice(0, 50)}`, size: 'xs', color: '#555555', wrap: true,
-        })),
+        ...kolContext.slice(0, 2).map(k => {
+          const dateSuffix = formatShortDate(k.date);
+          return {
+            type: 'text', text: `• ${k.kol}${dateSuffix ? `（${dateSuffix}）` : ''}：${k.reason.slice(0, 50)}`, size: 'xs', color: '#555555', wrap: true,
+          };
+        }),
       ],
     });
   }
@@ -280,7 +290,7 @@ function buildNewStockBubble(stock: NewWatchlistStock): FlexComponent {
     // KOL sources
     const kolRows = stock.kolSources.slice(0, 3).map(k => ({
       type: 'box', layout: 'vertical', spacing: 'xs', contents: [
-        { type: 'text', text: `📣 ${k.kol}`, size: 'xs', weight: 'bold', color: '#333333' },
+        { type: 'text', text: `📣 ${k.kol}${formatShortDate(k.date) ? `（${formatShortDate(k.date)}）` : ''}`, size: 'xs', weight: 'bold', color: '#333333' },
         { type: 'text', text: k.reason.slice(0, 80), size: 'xs', color: '#666666', wrap: true },
       ],
     }));

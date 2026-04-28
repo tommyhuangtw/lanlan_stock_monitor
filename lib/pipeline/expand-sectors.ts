@@ -198,7 +198,7 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
               market: normalized.market,
               name: stock.name || normalized.name || null,
               addedBy: 'sector_expansion',
-              kolSources: [{ kol: primaryTheme.kol, reason: stock.reason }],
+              kolSources: [{ kol: primaryTheme.kol, reason: stock.reason, date: todayStr }],
               sectorTheme: primaryTheme.theme,
             });
           }

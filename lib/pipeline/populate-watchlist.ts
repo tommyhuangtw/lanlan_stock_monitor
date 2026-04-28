@@ -285,7 +285,7 @@ async function upsertWatchlistStock(
       market: params.market,
       name: params.name,
       addedBy: 'pipeline',
-      kolSources: params.kolSources.map(k => ({ kol: k.kol, reason: k.reason })),
+      kolSources: params.kolSources.map(k => ({ kol: k.kol, reason: k.reason, date: k.date })),
     });
   }
 }

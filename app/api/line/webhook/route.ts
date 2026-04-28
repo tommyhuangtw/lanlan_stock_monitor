@@ -748,10 +748,6 @@ async function buildOpportunityReply(): Promise<Msg[]> {
     const stock = stockMap.get(alert.watchlist_stock_id);
     const kolSources = (stock?.kol_sources as Array<{ kol: string; date: string; confidence: string }>) || [];
 
-    // Only include stocks with bullish KOL backing
-    const hasBullishKol = kolSources.length > 0;
-    if (!hasBullishKol) continue;
-
     const alertScore = ALERT_TYPE_CONFIG[alert.alert_type]?.score || 5;
     const kolName = kolCtx[0]?.kol || kolSources[0]?.kol || '';
     const kolDate = kolCtx[0]?.date || kolSources[0]?.date || '';
@@ -779,7 +775,7 @@ async function buildOpportunityReply(): Promise<Msg[]> {
   const opportunities = [...tickerMap.values()].sort((a, b) => b.score - a.score).slice(0, 8);
 
   if (opportunities.length === 0) {
-    return [{ type: 'text', text: '🎯 近 7 日有技術訊號但沒有 KOL 看多的標的。\n\n輸入 /清單 查看所有追蹤股票。' }];
+    return [{ type: 'text', text: '🎯 近 7 日沒有偵測到進場機會。\n\n輸入 /清單 查看所有追蹤股票。' }];
   }
 
   // Build flex bubble

@@ -38,9 +38,15 @@ async function main() {
 
     if (newStocks && newStocks.length > 0) {
       console.log(`Backfilling ${newStocks.length} new stocks (300 days for SMA200)...`);
-      for (const stock of newStocks) {
-        const stored = await backfillPrices(stock.ticker_normalized, 300);
-        console.log(`  ${stock.ticker_normalized}: ${stored} days backfilled`);
+      const BACKFILL_BATCH = 5;
+      for (let i = 0; i < newStocks.length; i += BACKFILL_BATCH) {
+        const batch = newStocks.slice(i, i + BACKFILL_BATCH);
+        const results = await Promise.all(
+          batch.map(stock => backfillPrices(stock.ticker_normalized, 300))
+        );
+        batch.forEach((stock, idx) => {
+          console.log(`  ${stock.ticker_normalized}: ${results[idx]} days backfilled`);
+        });
       }
     } else {
       console.log('No new stocks to backfill.');
@@ -58,9 +64,15 @@ async function main() {
 
     if (noAliasStocks && noAliasStocks.length > 0) {
       console.log(`Generating aliases for ${noAliasStocks.length} stocks...`);
-      for (const stock of noAliasStocks) {
-        const aliases = await generateAndSaveAliases(stock.id, stock.ticker_normalized, stock.name);
-        console.log(`  ${stock.ticker_normalized}: [${aliases.join(', ')}]`);
+      const ALIAS_BATCH = 5;
+      for (let i = 0; i < noAliasStocks.length; i += ALIAS_BATCH) {
+        const batch = noAliasStocks.slice(i, i + ALIAS_BATCH);
+        const results = await Promise.all(
+          batch.map(stock => generateAndSaveAliases(stock.id, stock.ticker_normalized, stock.name))
+        );
+        batch.forEach((stock, idx) => {
+          console.log(`  ${stock.ticker_normalized}: [${results[idx].join(', ')}]`);
+        });
       }
     } else {
       console.log('All stocks have aliases.');

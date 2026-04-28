@@ -34,6 +34,8 @@ export interface TechnicalSnapshot {
   avgVolume20d: number | null;
   // ATR
   atr14: number | null;
+  // Daily change
+  dailyChangePct: number | null;
 }
 
 /**
@@ -111,6 +113,11 @@ export function computeTechnicalSnapshot(prices: StockQuote[]): TechnicalSnapsho
     ? recentVolumes20.reduce((a, b) => a + b, 0) / recentVolumes20.length
     : null;
 
+  // Daily change (today vs previous close)
+  const dailyChangePct = closes.length >= 2
+    ? ((closes[closes.length - 1] - closes[closes.length - 2]) / closes[closes.length - 2]) * 100
+    : null;
+
   // ATR(14)
   let atr14: number | null = null;
   if (prices.length >= 15) {
@@ -142,6 +149,7 @@ export function computeTechnicalSnapshot(prices: StockQuote[]): TechnicalSnapsho
     volume,
     avgVolume20d,
     atr14,
+    dailyChangePct,
   };
 }
 

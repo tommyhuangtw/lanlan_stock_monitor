@@ -30,7 +30,9 @@ export type AlertType =
   | 'consolidation'
   | 'near_kol_support'
   | 'sma_support'
-  | 'volume_surge';
+  | 'volume_surge'
+  | 'significant_surge_5pct'
+  | 'breakout_new_high';
 
 export interface EntrySignal {
   alertType: AlertType;
@@ -226,6 +228,33 @@ async function checkStock(stock: WatchlistStock): Promise<EntrySignal[]> {
       technicalSnapshot: snapshot,
       kolContext,
     });
+  }
+
+  // Rule 7: Significant surge (single-day +5%)
+  if (snapshot.dailyChangePct !== null && snapshot.dailyChangePct >= 5) {
+    signals.push({
+      alertType: 'significant_surge_5pct',
+      triggerPrice: snapshot.currentPrice,
+      triggerReason: `單日暴漲 ${snapshot.dailyChangePct.toFixed(1)}%，留意是否有重大利多消息`,
+      technicalSnapshot: snapshot,
+      kolContext,
+    });
+  }
+
+  // Rule 8: Breakout new 20-day high (today breaks above, yesterday was below)
+  if (snapshot.high20d !== null && prices.length >= 21) {
+    const prevCloses = prices.slice(-21, -1).map(p => p.close);
+    const prevHigh20d = Math.max(...prevCloses);
+    const todayBreaksOut = snapshot.currentPrice >= snapshot.high20d && prices[prices.length - 2].close < prevHigh20d;
+    if (todayBreaksOut) {
+      signals.push({
+        alertType: 'breakout_new_high',
+        triggerPrice: snapshot.currentPrice,
+        triggerReason: `突破 20 日新高 ${prevHigh20d.toFixed(2)}，趨勢轉強`,
+        technicalSnapshot: snapshot,
+        kolContext,
+      });
+    }
   }
 
   // Filter out signals that were recently sent (72-hour cooldown)

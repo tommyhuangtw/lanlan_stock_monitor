@@ -48,6 +48,8 @@ export interface DetectionResult {
   market: 'US' | 'TW';
   watchlistStockId: number;
   signals: EntrySignal[];
+  trailingPE?: number;
+  forwardPE?: number;
 }
 
 interface WatchlistStock {
@@ -58,6 +60,8 @@ interface WatchlistStock {
   kol_sources: Array<{ kol: string; reason: string; date: string; confidence: string }>;
   kol_price_levels: Array<{ level: number; type: string; kol: string; date: string }>;
   consensus: string;
+  trailing_pe: number | null;
+  forward_pe: number | null;
 }
 
 // Cooldown: don't re-alert same stock + type within 72 hours
@@ -95,6 +99,8 @@ export async function detectEntryPoints(marketFilter?: 'US' | 'TW'): Promise<Det
           market: stock.market as 'US' | 'TW',
           watchlistStockId: stock.id,
           signals,
+          trailingPE: stock.trailing_pe ?? undefined,
+          forwardPE: stock.forward_pe ?? undefined,
         });
       }
     } catch (error) {
@@ -117,11 +123,22 @@ async function checkStock(stock: WatchlistStock): Promise<EntrySignal[]> {
   const snapshot = computeTechnicalSnapshot(prices);
   if (!snapshot) return [];
 
-  const kolContext = (stock.kol_sources || []).slice(0, 3).map(k => ({
-    kol: k.kol,
-    reason: k.reason,
-    date: k.date,
-  }));
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+
+  const kolContext = (stock.kol_sources || [])
+    .filter(k => {
+      if (!k.date || k.date === 'unknown') return false;
+      const d = new Date(k.date);
+      return !isNaN(d.getTime()) && d >= twoMonthsAgo;
+    })
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 3)
+    .map(k => ({
+      kol: k.kol,
+      reason: k.reason,
+      date: k.date,
+    }));
 
   const signals: EntrySignal[] = [];
 

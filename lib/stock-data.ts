@@ -16,6 +16,8 @@ interface YahooQuoteResult {
   regularMarketDayHigh?: number;
   regularMarketDayLow?: number;
   regularMarketVolume?: number;
+  trailingPE?: number;
+  forwardPE?: number;
 }
 
 interface YahooHistoricalBar {
@@ -35,6 +37,8 @@ export interface StockQuote {
   low: number;
   close: number;
   volume: number;
+  trailingPE?: number;
+  forwardPE?: number;
 }
 
 /**
@@ -56,6 +60,8 @@ export async function fetchLatestQuote(tickerNormalized: string): Promise<StockQ
       low: result.regularMarketDayLow || result.regularMarketPrice,
       close: result.regularMarketPrice,
       volume: result.regularMarketVolume || 0,
+      trailingPE: result.trailingPE ?? undefined,
+      forwardPE: result.forwardPE ?? undefined,
     };
   } catch (error) {
     log('error', `[fetchLatestQuote] Failed for ${tickerNormalized}: ${error}`);
@@ -159,10 +165,12 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
         continue;
       }
 
-      // Update current_price on watchlist_stocks
+      // Update current_price and PE ratios on watchlist_stocks
       const updateData: Record<string, unknown> = {
         current_price: quote.close,
         last_price_update: new Date().toISOString(),
+        trailing_pe: quote.trailingPE ?? null,
+        forward_pe: quote.forwardPE ?? null,
       };
       // Set price_at_first_mention if not yet set
       if (stock.price_at_first_mention === undefined || stock.price_at_first_mention === null) {

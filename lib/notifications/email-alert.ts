@@ -53,6 +53,8 @@ function generateAlertHtml(results: DetectionResult[]): string {
             RSI(14): ${snapshot.rsi14?.toFixed(1) ?? 'N/A'}
             ${snapshot.sma50 ? ` | SMA50: ${snapshot.sma50.toFixed(2)}` : ''}
             ${snapshot.sma200 ? ` | SMA200: ${snapshot.sma200.toFixed(2)}` : ''}
+            ${result.trailingPE ? ` | PE(TTM): ${result.trailingPE.toFixed(1)}` : ''}
+            ${result.forwardPE ? ` | 預估PE: ${result.forwardPE.toFixed(1)}` : ''}
           </div>
         ` : ''}
       </div>

@@ -143,6 +143,34 @@ function buildAlertBubble(result: DetectionResult): FlexComponent {
     { type: 'box', layout: 'vertical', margin: 'lg', spacing: 'md', contents: signalContents },
   ];
 
+  // PE ratio
+  const trailingPE = result.trailingPE;
+  const forwardPE = result.forwardPE;
+  if (trailingPE || forwardPE) {
+    bodyContents.push({ type: 'separator', margin: 'lg' });
+    const peContents: FlexComponent[] = [];
+    if (trailingPE) {
+      peContents.push({
+        type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '本益比(TTM)', size: 'xs', color: '#999999', flex: 3 },
+          { type: 'text', text: trailingPE.toFixed(1), size: 'xs', color: '#555555', flex: 3, align: 'end' },
+        ],
+      });
+    }
+    if (forwardPE) {
+      peContents.push({
+        type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '預估本益比', size: 'xs', color: '#999999', flex: 3 },
+          { type: 'text', text: forwardPE.toFixed(1), size: 'xs', color: '#555555', flex: 3, align: 'end' },
+        ],
+      });
+    }
+    bodyContents.push({
+      type: 'box', layout: 'vertical', margin: 'md', spacing: 'sm',
+      contents: peContents,
+    });
+  }
+
   // Reference prices
   const refParts: Array<{ label: string; value: string }> = [];
   if (snapshot?.sma50) refParts.push({ label: '50日均價', value: `${currency}${snapshot.sma50.toFixed(2)}` });
@@ -172,7 +200,7 @@ function buildAlertBubble(result: DetectionResult): FlexComponent {
         ...kolContext.slice(0, 2).map(k => {
           const dateSuffix = formatShortDate(k.date);
           return {
-            type: 'text', text: `• ${k.kol}${dateSuffix ? `（${dateSuffix}）` : ''}：${k.reason.slice(0, 50)}`, size: 'xs', color: '#555555', wrap: true,
+            type: 'text', text: `• ${k.kol}${dateSuffix ? `（${dateSuffix}）` : ''}：${k.reason.slice(0, 100)}`, size: 'xs', color: '#555555', wrap: true,
           };
         }),
       ],
@@ -291,7 +319,7 @@ function buildNewStockBubble(stock: NewWatchlistStock): FlexComponent {
     const kolRows = stock.kolSources.slice(0, 3).map(k => ({
       type: 'box', layout: 'vertical', spacing: 'xs', contents: [
         { type: 'text', text: `📣 ${k.kol}${formatShortDate(k.date) ? `（${formatShortDate(k.date)}）` : ''}`, size: 'xs', weight: 'bold', color: '#333333' },
-        { type: 'text', text: k.reason.slice(0, 80), size: 'xs', color: '#666666', wrap: true },
+        { type: 'text', text: k.reason.slice(0, 120), size: 'xs', color: '#666666', wrap: true },
       ],
     }));
     bodyContents.push({
@@ -311,7 +339,7 @@ function buildNewStockBubble(stock: NewWatchlistStock): FlexComponent {
     }
     if (stock.kolSources[0]?.reason) {
       details.push({
-        type: 'text', text: stock.kolSources[0].reason.slice(0, 80), size: 'xs', color: '#666666', wrap: true, margin: 'sm',
+        type: 'text', text: stock.kolSources[0].reason.slice(0, 120), size: 'xs', color: '#666666', wrap: true, margin: 'sm',
       });
     }
     if (stock.kolSources[0]?.kol) {

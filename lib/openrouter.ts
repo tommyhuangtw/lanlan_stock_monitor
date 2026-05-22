@@ -572,8 +572,43 @@ ${JSON.stringify(inputData, null, 2)}`
       const report = normalizeConsolidatedReport(rawReport, analyses.length);
 
       console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
+
+      // Fallback: build episodeSummaries from input analyses if AI omitted them
       if (report.episodeSummaries.length === 0 && analyses.length > 0) {
-        console.warn('[consolidateReports] ⚠️ episodeSummaries is empty despite having input analyses!');
+        console.warn('[consolidateReports] ⚠️ episodeSummaries is empty, building from input analyses');
+        for (const a of analyses) {
+          report.episodeSummaries.push({
+            podcast: a.podcastName,
+            episode: a.episodeTitle,
+            episodeLink: a.episodeLink || '',
+            sentiment: a.analysis.overall_sentiment?.includes('bullish') ? 'bullish' :
+                       a.analysis.overall_sentiment?.includes('bearish') ? 'bearish' : 'neutral',
+            oneLiner: a.analysis.summary?.slice(0, 100) || '',
+            detailedSummary: a.analysis.summary || '',
+            highlights: a.analysis.episodeHighlights || [],
+            source: 'podcast',
+          });
+        }
+      }
+
+      // Fallback: extract signals from input analyses if AI omitted them
+      if (report.bullishSignals.length === 0 && report.bearishSignals.length === 0 && analyses.length > 0) {
+        console.warn('[consolidateReports] ⚠️ signals are empty, extracting from input analyses');
+        for (const a of analyses) {
+          for (const sig of a.analysis.signals || []) {
+            const entry = {
+              ticker: sig.ticker,
+              consensus: '單一來源',
+              sources: [{ kol: a.podcastName, reason: sig.reason, action: sig.action || '無', confidence: sig.confidence || 'medium' }],
+              overallConfidence: sig.confidence || 'medium',
+              timeHorizon: sig.timeHorizon || 'medium',
+              priceLevel: sig.priceLevel || '',
+              divergence: '',
+            };
+            if (sig.type === 'bullish') report.bullishSignals.push(entry);
+            else if (sig.type === 'bearish') report.bearishSignals.push(entry);
+          }
+        }
       }
 
       return report;

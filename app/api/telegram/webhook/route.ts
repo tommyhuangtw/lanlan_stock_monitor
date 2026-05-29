@@ -132,8 +132,10 @@ export async function POST(request: NextRequest) {
 
   // Strip "/" prefix and parse command; handle bot username suffix (e.g. /kol@mybotname)
   let cmdText = rawText.startsWith('/') ? rawText.slice(1).trim() : rawText;
-  // Remove @botname suffix from commands like /kol@mybot
-  cmdText = cmdText.replace(/@\S+/, '').trim();
+  // Remove @botname suffix from slash commands like /kol@mybot (but NOT from @KOL queries)
+  if (rawText.startsWith('/')) {
+    cmdText = cmdText.replace(/@\S+/, '').trim();
+  }
   const cmdLower = cmdText.toLowerCase();
 
   // Route commands
@@ -372,7 +374,7 @@ async function sendKolListReply(chatId: string | number): Promise<void> {
     lines.push('🎙️ <b>Podcast</b>');
     for (const p of podcasts) {
       const shortName = extractKolKeyword(p.name);
-      lines.push(`• ${p.name}  → <code>@${shortName}</code>`);
+      lines.push(`• ${p.name}  ▸ <code>@${shortName}</code>`);
     }
     lines.push('');
   }
@@ -381,20 +383,19 @@ async function sendKolListReply(chatId: string | number): Promise<void> {
     lines.push('📺 <b>YouTube</b>');
     for (const y of youtubes) {
       const shortName = extractKolKeyword(y.name);
-      lines.push(`• ${y.name}  → <code>@${shortName}</code>`);
+      lines.push(`• ${y.name}  ▸ <code>@${shortName}</code>`);
     }
     lines.push('');
   }
 
-  lines.push('━━━━━━━━━━━━━━━');
-  lines.push('💡 查觀點：<code>@股癌</code>、<code>@NaNa</code>');
+  lines.push('💡 點擊指令複製，或用下方按鈕快速查看');
 
   // Featured KOL buttons
   const kolButtons: InlineKeyboard = [];
   const featured = [...FEATURED_KOL_KEYWORDS];
   const row: Array<{ text: string; callback_data: string }> = [];
   for (const name of featured) {
-    row.push({ text: `@${name}`, callback_data: `kol:${name}` });
+    row.push({ text: `📣 ${name}`, callback_data: `kol:${name}` });
     if (row.length === 3) {
       kolButtons.push([...row]);
       row.length = 0;

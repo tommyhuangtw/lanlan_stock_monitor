@@ -77,15 +77,17 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string): Prom
   }
 }
 
-// Quick-nav buttons appended to most responses
-const NAV_KEYBOARD: InlineKeyboard = [
-  [
+// Quick-nav buttons — pass current page to exclude it
+function navKeyboard(current?: string): InlineKeyboard {
+  const all = [
     { text: '🎯 機會', callback_data: 'cmd:opportunity' },
     { text: '📋 清單', callback_data: 'cmd:watchlist' },
     { text: '📣 KOL', callback_data: 'cmd:kol_list' },
     { text: '❓ 說明', callback_data: 'cmd:help' },
-  ],
-];
+  ];
+  return [all.filter(b => b.callback_data !== current)];
+}
+const NAV_KEYBOARD: InlineKeyboard = navKeyboard();
 
 // ============================================================
 // Webhook handler
@@ -224,7 +226,7 @@ async function sendHelpReply(chatId: string | number): Promise<void> {
     '🟥 60-100 偏熱 → 追高風險大',
   ].join('\n');
 
-  await sendMessage(chatId, html, NAV_KEYBOARD);
+  await sendMessage(chatId, html, navKeyboard('cmd:help'));
 }
 
 // ============================================================
@@ -275,7 +277,7 @@ async function sendOpportunityReply(chatId: string | number): Promise<void> {
   lines.push(`<i>分數越高 = 技術訊號越強 + KOL 共識越高</i>`);
   lines.push(`共掃描 ${totalStocksScanned} 檔追蹤股`);
 
-  await sendMessage(chatId, lines.join('\n'), NAV_KEYBOARD);
+  await sendMessage(chatId, lines.join('\n'), navKeyboard('cmd:opportunity'));
 }
 
 // ============================================================
@@ -286,7 +288,7 @@ async function sendWatchlistReply(chatId: string | number): Promise<void> {
   const { scoredStocks, allStocks, usStocks, twStocks } = await fetchWatchlist();
 
   if (allStocks.length === 0) {
-    await sendMessage(chatId, '目前沒有追蹤中的股票。', NAV_KEYBOARD);
+    await sendMessage(chatId, '目前沒有追蹤中的股票。', navKeyboard('cmd:watchlist'));
     return;
   }
 
@@ -345,11 +347,9 @@ async function sendWatchlistReply(chatId: string | number): Promise<void> {
     listLines.push('');
   }
 
-  listLines.push('━━━━━━━━━━━━━━━');
-  listLines.push('💡 查詳情：直接輸入代號（如 <code>/TSLA</code>）');
-  listLines.push('💡 查觀點：<code>@股癌</code>、<code>@NaNa</code>');
+  listLines.push('💡 輸入代號查詳情（如 <code>/TSLA</code>）');
 
-  await sendMessage(chatId, listLines.join('\n'), NAV_KEYBOARD);
+  await sendMessage(chatId, listLines.join('\n'), navKeyboard('cmd:watchlist'));
 }
 
 // ============================================================
@@ -360,7 +360,7 @@ async function sendKolListReply(chatId: string | number): Promise<void> {
   const { podcasts, youtubes, total } = await fetchKolList();
 
   if (total === 0) {
-    await sendMessage(chatId, '目前沒有 KOL 資料。', NAV_KEYBOARD);
+    await sendMessage(chatId, '目前沒有 KOL 資料。', navKeyboard('cmd:kol_list'));
     return;
   }
 
@@ -579,7 +579,7 @@ async function sendStockReply(chatId: string | number, query: string): Promise<v
     lines.push('━━━━━━━━━━━━━━━');
     lines.push(`<i>${kolOpinions.length} 位 KOL 近期觀點 ｜ /說明 了解更多</i>`);
 
-    await sendMessage(chatId, lines.join('\n'), NAV_KEYBOARD);
+    await sendMessage(chatId, lines.join('\n'), navKeyboard());
   } else {
     // Analyses-only (untracked stock)
     const { query: q, opinions } = result;
@@ -605,6 +605,6 @@ async function sendStockReply(chatId: string | number, query: string): Promise<v
     lines.push('━━━━━━━━━━━━━━━');
     lines.push('<i>此股票未被系統自動追蹤</i>');
 
-    await sendMessage(chatId, lines.join('\n'), NAV_KEYBOARD);
+    await sendMessage(chatId, lines.join('\n'), navKeyboard());
   }
 }

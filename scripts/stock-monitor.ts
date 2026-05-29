@@ -117,7 +117,7 @@ async function main() {
     // Rule 2 & 3: Enforce market caps (TW <= 40, US <= 60)
     const MARKET_CAPS: Array<{ market: 'TW' | 'US'; limit: number; label: string }> = [
       { market: 'TW', limit: 40, label: '台股' },
-      { market: 'US', limit: 60, label: '美股' },
+      { market: 'US', limit: 100, label: '美股' },
     ];
 
     for (const { market, limit, label } of MARKET_CAPS) {

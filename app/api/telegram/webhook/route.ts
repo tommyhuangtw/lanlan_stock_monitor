@@ -550,9 +550,15 @@ async function sendStockReply(chatId: string | number, query: string): Promise<v
       if (snapshot.sma50 || snapshot.sma200) lines.push('');
     }
 
-    // Recent alert signals
+    // Recent alert signals (deduplicate overlapping drop signals)
     if (recentAlertTypes.length > 0) {
-      for (const alertType of recentAlertTypes) {
+      const filtered = recentAlertTypes.filter(t => {
+        if (t === 'significant_drop_5pct' && recentAlertTypes.includes('significant_drop_10pct')) return false;
+        if (t === 'significant_drop_5pct' && recentAlertTypes.includes('significant_drop_20pct')) return false;
+        if (t === 'significant_drop_10pct' && recentAlertTypes.includes('significant_drop_20pct')) return false;
+        return true;
+      });
+      for (const alertType of filtered) {
         const cfg = ALERT_TYPE_CONFIG[alertType];
         if (cfg) {
           lines.push(`⚡ ${cfg.label}：${cfg.detail}`);

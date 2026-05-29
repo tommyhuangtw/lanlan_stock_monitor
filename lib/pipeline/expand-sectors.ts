@@ -12,7 +12,7 @@ import { supabaseAdmin } from '../supabase';
 import { openrouter, PRO_MODEL, SectorTheme } from '../openrouter';
 import { normalizeTicker, isAllowedTicker, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
-import type { NewWatchlistStock } from '../notifications/line';
+import type { NewWatchlistStock } from '../notifications/telegram';
 
 const PERPLEXITY_MODEL = 'perplexity/sonar-pro-search';
 const EXPANSION_COOLDOWN_DAYS = 7;

@@ -119,7 +119,7 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
   // Get active watchlist stocks
   let query = supabaseAdmin
     .from('watchlist_stocks')
-    .select('id, ticker_normalized, market, price_at_first_mention')
+    .select('id, ticker_normalized, market, price_at_first_mention, consecutive_fetch_failures')
     .eq('status', 'active');
 
   if (marketFilter) {
@@ -141,6 +141,11 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
       if (!quote) {
         results.failed++;
         results.errors.push(`No quote for ${stock.ticker_normalized}`);
+        // Increment consecutive failure counter
+        await supabaseAdmin
+          .from('watchlist_stocks')
+          .update({ consecutive_fetch_failures: (stock.consecutive_fetch_failures || 0) + 1 })
+          .eq('id', stock.id);
         continue;
       }
 
@@ -165,12 +170,13 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
         continue;
       }
 
-      // Update current_price and PE ratios on watchlist_stocks
+      // Update current_price, PE ratios, and reset failure counter
       const updateData: Record<string, unknown> = {
         current_price: quote.close,
         last_price_update: new Date().toISOString(),
         trailing_pe: quote.trailingPE ?? null,
         forward_pe: quote.forwardPE ?? null,
+        consecutive_fetch_failures: 0,
       };
       // Set price_at_first_mention if not yet set
       if (stock.price_at_first_mention === undefined || stock.price_at_first_mention === null) {
@@ -188,6 +194,11 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
     } catch (error) {
       results.failed++;
       results.errors.push(`Error for ${stock.ticker_normalized}: ${error}`);
+      // Increment consecutive failure counter
+      await supabaseAdmin
+        .from('watchlist_stocks')
+        .update({ consecutive_fetch_failures: (stock.consecutive_fetch_failures || 0) + 1 })
+        .eq('id', stock.id);
     }
   }
 

@@ -9,8 +9,8 @@
 
 import { fetchAndStorePrices, backfillPrices } from '../lib/stock-data';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
-import { sendTelegramAlerts } from '../lib/notifications/telegram';
-// import { sendLineAlerts } from '../lib/notifications/line'; // [DEPRECATED] Migrated to Telegram
+import { sendTelegramAlerts, sendCleanupNotification } from '../lib/notifications/telegram';
+import type { CleanupEntry } from '../lib/notifications/telegram';
 import { sendEmailAlert } from '../lib/notifications/email-alert';
 import { generateAndSaveAliases } from '../lib/generate-aliases';
 import { supabaseAdmin } from '../lib/supabase';
@@ -86,6 +86,96 @@ async function main() {
   console.log(`Fetched: ${priceResults.fetched}, Stored: ${priceResults.stored}, Failed: ${priceResults.failed}`);
   if (priceResults.errors.length > 0) {
     console.log(`Errors: ${priceResults.errors.join('; ')}`);
+  }
+
+  // Step 1b: Auto-cleanup stale/invalid stocks
+  {
+    console.log('\n--- Auto-cleanup watchlist ---');
+    const cleanupEntries: CleanupEntry[] = [];
+
+    // Rule 1: Archive stocks with 7+ consecutive fetch failures
+    const { data: failedStocks } = await supabaseAdmin
+      .from('watchlist_stocks')
+      .select('id, ticker_normalized, consecutive_fetch_failures')
+      .eq('status', 'active')
+      .gte('consecutive_fetch_failures', 7);
+
+    if (failedStocks && failedStocks.length > 0) {
+      for (const stock of failedStocks) {
+        await supabaseAdmin
+          .from('watchlist_stocks')
+          .update({ status: 'archived', archived_reason: 'fetch_failed_7x' })
+          .eq('id', stock.id);
+        cleanupEntries.push({
+          ticker: stock.ticker_normalized,
+          reason: `連續 ${stock.consecutive_fetch_failures} 次無法取得價格`,
+        });
+      }
+      console.log(`  Archived ${failedStocks.length} stocks (fetch failures)`);
+    }
+
+    // Rule 2 & 3: Enforce market caps (TW <= 40, US <= 60)
+    const MARKET_CAPS: Array<{ market: 'TW' | 'US'; limit: number; label: string }> = [
+      { market: 'TW', limit: 40, label: '台股' },
+      { market: 'US', limit: 60, label: '美股' },
+    ];
+
+    for (const { market, limit, label } of MARKET_CAPS) {
+      const { count } = await supabaseAdmin
+        .from('watchlist_stocks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .eq('market', market);
+
+      const activeCount = count || 0;
+      if (activeCount > limit) {
+        const excess = activeCount - limit;
+        // Get the least-recently-mentioned stocks to archive
+        const { data: staleStocks } = await supabaseAdmin
+          .from('watchlist_stocks')
+          .select('id, ticker_normalized, last_mentioned_at')
+          .eq('status', 'active')
+          .eq('market', market)
+          .order('last_mentioned_at', { ascending: true, nullsFirst: true })
+          .limit(excess);
+
+        if (staleStocks && staleStocks.length > 0) {
+          for (const stock of staleStocks) {
+            await supabaseAdmin
+              .from('watchlist_stocks')
+              .update({ status: 'archived', archived_reason: `over_${market.toLowerCase()}_limit` })
+              .eq('id', stock.id);
+            const mentionDate = stock.last_mentioned_at
+              ? new Date(stock.last_mentioned_at).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+              : '從未';
+            cleanupEntries.push({
+              ticker: stock.ticker_normalized,
+              reason: `${label}超過 ${limit} 檔上限，最後提及 ${mentionDate}`,
+            });
+          }
+          console.log(`  Archived ${staleStocks.length} ${market} stocks (over ${limit} limit)`);
+        }
+      }
+    }
+
+    // Send cleanup notification
+    if (cleanupEntries.length > 0) {
+      const { count: usActive } = await supabaseAdmin
+        .from('watchlist_stocks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .eq('market', 'US');
+      const { count: twActive } = await supabaseAdmin
+        .from('watchlist_stocks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .eq('market', 'TW');
+
+      await sendCleanupNotification(cleanupEntries, usActive || 0, twActive || 0);
+      console.log(`  Sent cleanup notification (${cleanupEntries.length} stocks archived)`);
+    } else {
+      console.log('  No stocks to clean up.');
+    }
   }
 
   // Step 2: Detect entry points

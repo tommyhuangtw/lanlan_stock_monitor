@@ -2,12 +2,12 @@
  * Telegram Bot API Notification Module
  *
  * Sends stock alert notifications via Telegram Bot API using HTML formatting.
- * Supports both entry-point alerts and new watchlist stock notifications.
- * US and TW stocks are sent as separate message groups.
+ * Consolidates multiple stocks into single messages for readability.
  */
 
 import { log } from '../logger';
 import type { DetectionResult } from '../entry-point-detector';
+import { supabaseAdmin } from '../supabase';
 
 export interface NewWatchlistStock {
   ticker: string;
@@ -18,14 +18,9 @@ export interface NewWatchlistStock {
   sectorTheme?: string;
 }
 
-/**
- * Format a date string to short M/D format.
- */
-function formatShortDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+export interface CleanupEntry {
+  ticker: string;
+  reason: string;
 }
 
 /**
@@ -34,7 +29,6 @@ function formatShortDate(dateStr?: string): string {
 async function sendTelegramMessage(
   chatId: string,
   html: string,
-  replyMarkup?: { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
 ): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -43,22 +37,15 @@ async function sendTelegramMessage(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const body: Record<string, any> = {
-      chat_id: chatId,
-      text: html,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    };
-
-    if (replyMarkup) {
-      body.reply_markup = replyMarkup;
-    }
-
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: html,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
     });
 
     if (!response.ok) {
@@ -75,210 +62,93 @@ async function sendTelegramMessage(
 }
 
 /**
- * Format an RSI heat bar using emoji segments.
- * Returns a 10-segment bar with a descriptive label.
+ * Format a compact alert block for a single stock (3-4 lines).
  */
-function formatRsiBar(rsi: number): string {
-  const segments = Math.round(rsi / 10);
-
-  let filled: string;
-  let label: string;
-
-  if (rsi < 30) {
-    filled = '🟦';
-    label = '偏冷，可能接近低點';
-  } else if (rsi < 40) {
-    filled = '🔷';
-    label = '偏弱，買氣不足';
-  } else if (rsi < 60) {
-    filled = '⬛';
-    label = '中性，多空拉鋯';
-  } else if (rsi < 70) {
-    filled = '🟧';
-    label = '偏熱，買氣活絡';
-  } else {
-    filled = '🟥';
-    label = '過熱，追高風險大';
-  }
-
-  const bar = filled.repeat(segments) + '⬜'.repeat(10 - segments);
-  return `${bar} ${label}`;
-}
-
-/**
- * Format an alert message for a single stock detection result.
- * Returns an HTML-formatted string for Telegram.
- */
-function formatAlertMessage(result: DetectionResult): string {
-  const market = result.market;
-  const flag = market === 'TW' ? '🇹🇼' : '🇺🇸';
-  const currency = market === 'TW' ? 'NT$' : '$';
-
+function formatCompactAlert(result: DetectionResult): string {
+  const flag = result.market === 'TW' ? '🇹🇼' : '🇺🇸';
+  const currency = result.market === 'TW' ? 'NT$' : '$';
   const snapshot = result.signals[0]?.technicalSnapshot;
-  const currentPrice = snapshot?.currentPrice ?? 0;
-  const rsi = snapshot?.rsi14 ?? 50;
+  const price = snapshot?.currentPrice ?? 0;
+  const rsi = snapshot?.rsi14;
 
   const lines: string[] = [];
 
-  // Header: flag, ticker, price
-  lines.push(`${flag} <b>${result.ticker}</b>  ·  ${currency}${currentPrice.toFixed(2)}`);
-  lines.push('');
+  // Line 1: ticker + price + RSI
+  const rsiLabel = rsi != null ? `  RSI ${rsi.toFixed(0)}` : '';
+  lines.push(`${flag} <b>${result.ticker}</b>  ${currency}${price.toFixed(2)}${rsiLabel}`);
 
-  // Heat meter
-  lines.push(`🌡 市場熱度  <b>${rsi.toFixed(0)}</b> / 100`);
-  lines.push(formatRsiBar(rsi));
-  lines.push('');
+  // Line 2: signals (joined with ·)
+  const signalTexts = result.signals.map(s => s.triggerReason).slice(0, 3);
+  lines.push(`⚡ ${signalTexts.join(' · ')}`);
 
-  // Signals
-  for (const signal of result.signals) {
-    lines.push(`📌 ${signal.triggerReason}`);
+  // Line 3: PE + SMA (conditional)
+  const parts: string[] = [];
+  if (result.trailingPE) {
+    let pe = `PE ${result.trailingPE.toFixed(1)}`;
+    if (result.forwardPE) pe += `(F ${result.forwardPE.toFixed(1)})`;
+    parts.push(`💰 ${pe}`);
   }
-  lines.push('');
-
-  // PE ratio
-  const trailingPE = result.trailingPE;
-  const forwardPE = result.forwardPE;
-  if (trailingPE || forwardPE) {
-    const parts: string[] = [];
-    if (trailingPE) parts.push(`本益比(TTM) ${trailingPE.toFixed(1)}`);
-    if (forwardPE) parts.push(`預估 ${forwardPE.toFixed(1)}`);
-    lines.push(`💰 ${parts.join(' ｜ ')}`);
-  }
-
-  // Reference prices (SMA50, SMA200)
   const smaParts: string[] = [];
-  if (snapshot?.sma50) smaParts.push(`50日均 ${currency}${snapshot.sma50.toFixed(2)}`);
-  if (snapshot?.sma200) smaParts.push(`200日均 ${currency}${snapshot.sma200.toFixed(2)}`);
-  if (smaParts.length > 0) {
-    lines.push(`📊 ${smaParts.join(' ｜ ')}`);
-  }
-  lines.push('');
+  if (snapshot?.sma50) smaParts.push(`50日均 ${currency}${snapshot.sma50.toFixed(0)}`);
+  if (snapshot?.sma200) smaParts.push(`200日均 ${currency}${snapshot.sma200.toFixed(0)}`);
+  if (smaParts.length > 0) parts.push(`📊 ${smaParts.join(' ｜ ')}`);
+  if (parts.length > 0) lines.push(parts.join('  '));
 
-  // KOL context
+  // Line 4: top KOL opinion (if any, 1 only)
   const kolContext = result.signals[0]?.kolContext || [];
   if (kolContext.length > 0) {
-    lines.push(`📣 <b>KOL 觀點</b>`);
-    for (const k of kolContext.slice(0, 2)) {
-      const dateSuffix = formatShortDate(k.date);
-      const dateLabel = dateSuffix ? `（${dateSuffix}）` : '';
-      lines.push(`• <b>${k.kol}</b>${dateLabel}：${k.reason.slice(0, 100)}`);
-    }
-    lines.push('');
+    const k = kolContext[0];
+    lines.push(`📣 ${k.kol}：${k.reason.slice(0, 40)}`);
   }
-
-  // Disclaimer
-  lines.push(`<i>⚠️ 僅供教育參考，非投資建議</i>`);
-
-  return lines.join('\n');
-}
-
-/**
- * Format a new watchlist stock notification message.
- * Returns an HTML-formatted string for Telegram.
- */
-function formatNewStockMessage(stock: NewWatchlistStock): string {
-  const flag = stock.market === 'TW' ? '🇹🇼' : '🇺🇸';
-  const isKol = stock.addedBy === 'pipeline';
-  const sourceLabel = isKol ? '🎙️ KOL 推薦' : '🔬 AI 研究';
-
-  const lines: string[] = [];
-
-  // Header
-  const displayName = stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker;
-  lines.push(`${flag} <b>${displayName}</b>`);
-  lines.push(`📋 新加入監控 ｜ ${sourceLabel}`);
-  lines.push('');
-
-  if (isKol) {
-    // KOL sources
-    for (const k of stock.kolSources.slice(0, 3)) {
-      const dateSuffix = formatShortDate(k.date);
-      const dateLabel = dateSuffix ? `（${dateSuffix}）` : '';
-      lines.push(`📣 <b>${k.kol}</b>${dateLabel}`);
-      lines.push(`${k.reason.slice(0, 120)}`);
-      lines.push('');
-    }
-  } else {
-    // Sector expansion info
-    if (stock.sectorTheme) {
-      lines.push(`🏷 產業主題：<b>${stock.sectorTheme}</b>`);
-    }
-    if (stock.kolSources[0]?.reason) {
-      lines.push(stock.kolSources[0].reason.slice(0, 120));
-    }
-    if (stock.kolSources[0]?.kol) {
-      lines.push(`來源 KOL：${stock.kolSources[0].kol}`);
-    }
-    lines.push('');
-  }
-
-  lines.push(`<i>系統將自動監控此股票的入場時機</i>`);
 
   return lines.join('\n');
 }
 
 /**
  * Send stock alert notifications via Telegram.
- * US and TW stocks are sent as separate message groups.
- * Returns the number of alerts sent.
+ * Consolidates all stocks into 1-2 messages per market.
  */
 export async function sendTelegramAlerts(detectionResults: DetectionResult[]): Promise<number> {
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!chatId) {
-    log('warn', '[Telegram] TELEGRAM_CHAT_ID not configured, skipping Telegram notifications');
+  if (!chatId || !process.env.TELEGRAM_BOT_TOKEN) {
+    log('warn', '[Telegram] Telegram credentials not configured, skipping alerts');
     return 0;
   }
-
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    log('warn', '[Telegram] TELEGRAM_BOT_TOKEN not configured, skipping Telegram notifications');
-    return 0;
-  }
-
-  const usResults = detectionResults.filter(r => r.market === 'US');
-  const twResults = detectionResults.filter(r => r.market === 'TW');
 
   let sentCount = 0;
 
-  // Send US alerts
-  if (usResults.length > 0) {
-    const headerSent = await sendTelegramMessage(
-      chatId,
-      `🚨 <b>美股入場時機提醒</b>（${usResults.length} 檔）`
-    );
-    if (headerSent) {
+  for (const market of ['US', 'TW'] as const) {
+    const results = detectionResults.filter(r => r.market === market);
+    if (results.length === 0) continue;
+
+    const marketLabel = market === 'US' ? '美股' : '台股';
+
+    // Split into batches of 5 stocks per message
+    for (let i = 0; i < results.length; i += 5) {
+      const batch = results.slice(i, i + 5);
+      const isFirst = i === 0;
+
+      const lines: string[] = [];
+      if (isFirst) {
+        lines.push(`🚨 <b>${marketLabel}入場時機提醒</b>（${results.length} 檔）`);
+        lines.push('━━━━━━━━━━━━━━━');
+      }
+
+      for (const result of batch) {
+        lines.push('');
+        lines.push(formatCompactAlert(result));
+      }
+
+      lines.push('');
+      lines.push('━━━━━━━━━━━━━━━');
+      lines.push('<i>⚠️ 僅供教育參考，非投資建議</i>');
+
+      const success = await sendTelegramMessage(chatId, lines.join('\n'));
+      if (success) sentCount += batch.length;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    for (const result of usResults) {
-      const html = formatAlertMessage(result);
-      const success = await sendTelegramMessage(chatId, html);
-      if (success) sentCount++;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    log('info', `[Telegram] Sent ${sentCount} US stock alerts`);
-  }
-
-  // Send TW alerts
-  if (twResults.length > 0) {
-    const headerSent = await sendTelegramMessage(
-      chatId,
-      `🚨 <b>台股入場時機提醒</b>（${twResults.length} 檔）`
-    );
-    if (headerSent) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    let twSentCount = 0;
-    for (const result of twResults) {
-      const html = formatAlertMessage(result);
-      const success = await sendTelegramMessage(chatId, html);
-      if (success) twSentCount++;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    sentCount += twSentCount;
-    log('info', `[Telegram] Sent ${twSentCount} TW stock alerts`);
+    log('info', `[Telegram] Sent ${results.length} ${market} stock alerts`);
   }
 
   return sentCount;
@@ -286,8 +156,7 @@ export async function sendTelegramAlerts(detectionResults: DetectionResult[]): P
 
 /**
  * Send Telegram notifications for newly added watchlist stocks.
- * US and TW stocks are sent as separate message groups.
- * Returns the number of notifications sent.
+ * Consolidates all stocks into a single message.
  */
 export async function sendNewStockTelegramAlerts(stocks: NewWatchlistStock[]): Promise<number> {
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -298,51 +167,58 @@ export async function sendNewStockTelegramAlerts(stocks: NewWatchlistStock[]): P
 
   if (stocks.length === 0) return 0;
 
-  const usStocks = stocks.filter(s => s.market === 'US');
-  const twStocks = stocks.filter(s => s.market === 'TW');
-  let sentCount = 0;
+  const lines: string[] = [
+    `📋 <b>新加入監控</b>（${stocks.length} 檔）`,
+    '━━━━━━━━━━━━━━━',
+  ];
 
-  // Send US new stock alerts
-  if (usStocks.length > 0) {
-    const headerSent = await sendTelegramMessage(
-      chatId,
-      `📋 <b>新加入監控：美股</b>（${usStocks.length} 檔）`
-    );
-    if (headerSent) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+  for (const stock of stocks) {
+    const flag = stock.market === 'TW' ? '🇹🇼' : '🇺🇸';
+    const displayName = stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker;
+    const sourceLabel = stock.addedBy === 'pipeline' ? '🎙️ KOL' : '🔬 AI';
+    const themeLabel = stock.sectorTheme ? ` · ${stock.sectorTheme}` : '';
+
+    lines.push('');
+    lines.push(`${flag} <b>${displayName}</b>  ${sourceLabel}${themeLabel}`);
+
+    // Show top reason
+    const topSource = stock.kolSources[0];
+    if (topSource) {
+      const prefix = stock.addedBy === 'pipeline' ? topSource.kol : '研究';
+      lines.push(`   ${prefix}：${topSource.reason.slice(0, 60)}`);
     }
-
-    for (const stock of usStocks) {
-      const html = formatNewStockMessage(stock);
-      const success = await sendTelegramMessage(chatId, html);
-      if (success) sentCount++;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    log('info', `[Telegram] Sent new stock alerts: ${usStocks.length} US stocks`);
   }
 
-  // Send TW new stock alerts
-  if (twStocks.length > 0) {
-    const headerSent = await sendTelegramMessage(
-      chatId,
-      `📋 <b>新加入監控：台股</b>（${twStocks.length} 檔）`
-    );
-    if (headerSent) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+  const success = await sendTelegramMessage(chatId, lines.join('\n'));
+  if (success) {
+    log('info', `[Telegram] Sent new stock notification: ${stocks.length} stocks`);
+    return stocks.length;
+  }
+  return 0;
+}
 
-    let twSentCount = 0;
-    for (const stock of twStocks) {
-      const html = formatNewStockMessage(stock);
-      const success = await sendTelegramMessage(chatId, html);
-      if (success) twSentCount++;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+/**
+ * Send cleanup notification showing archived stocks.
+ */
+export async function sendCleanupNotification(
+  entries: CleanupEntry[],
+  usCurrent: number,
+  twCurrent: number,
+): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId || !process.env.TELEGRAM_BOT_TOKEN || entries.length === 0) return;
 
-    sentCount += twSentCount;
-    log('info', `[Telegram] Sent new stock alerts: ${twStocks.length} TW stocks`);
+  const lines: string[] = [
+    `🗑 <b>監控池清理</b>（${entries.length} 檔已移除）`,
+    '',
+  ];
+
+  for (const e of entries) {
+    lines.push(`• ${e.ticker} — ${e.reason}`);
   }
 
-  return sentCount;
+  lines.push('');
+  lines.push(`目前監控：🇺🇸 ${usCurrent} 檔  🇹🇼 ${twCurrent} 檔`);
+
+  await sendTelegramMessage(chatId, lines.join('\n'));
 }

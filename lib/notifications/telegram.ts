@@ -79,26 +79,26 @@ function formatCompactAlert(result: DetectionResult): string {
 
   // Line 2: signals (joined with ·)
   const signalTexts = result.signals.map(s => s.triggerReason).slice(0, 3);
-  lines.push(`⚡ ${signalTexts.join(' · ')}`);
+  lines.push(`   ⚡ ${signalTexts.join(' · ')}`);
 
   // Line 3: PE + SMA (conditional)
-  const parts: string[] = [];
+  const infoParts: string[] = [];
   if (result.trailingPE) {
     let pe = `PE ${result.trailingPE.toFixed(1)}`;
     if (result.forwardPE) pe += `(F ${result.forwardPE.toFixed(1)})`;
-    parts.push(`💰 ${pe}`);
+    infoParts.push(`💰 ${pe}`);
   }
   const smaParts: string[] = [];
   if (snapshot?.sma50) smaParts.push(`50日均 ${currency}${snapshot.sma50.toFixed(0)}`);
   if (snapshot?.sma200) smaParts.push(`200日均 ${currency}${snapshot.sma200.toFixed(0)}`);
-  if (smaParts.length > 0) parts.push(`📊 ${smaParts.join(' ｜ ')}`);
-  if (parts.length > 0) lines.push(parts.join('  '));
+  if (smaParts.length > 0) infoParts.push(`📊 ${smaParts.join(' ｜ ')}`);
+  if (infoParts.length > 0) lines.push(`   ${infoParts.join('  ')}`);
 
   // Line 4: top KOL opinion (if any, 1 only)
   const kolContext = result.signals[0]?.kolContext || [];
   if (kolContext.length > 0) {
     const k = kolContext[0];
-    lines.push(`📣 ${k.kol}：${k.reason.slice(0, 40)}`);
+    lines.push(`   📣 ${k.kol}：${k.reason.slice(0, 40)}`);
   }
 
   return lines.join('\n');
@@ -131,12 +131,12 @@ export async function sendTelegramAlerts(detectionResults: DetectionResult[]): P
       const lines: string[] = [];
       if (isFirst) {
         lines.push(`🚨 <b>${marketLabel}入場時機提醒</b>（${results.length} 檔）`);
-        lines.push('━━━━━━━━━━━━━━━');
+        lines.push('');
       }
 
-      for (const result of batch) {
-        lines.push('');
-        lines.push(formatCompactAlert(result));
+      for (let j = 0; j < batch.length; j++) {
+        if (j > 0) lines.push('');  // blank line between stocks
+        lines.push(formatCompactAlert(batch[j]));
       }
 
       lines.push('');
@@ -169,19 +169,19 @@ export async function sendNewStockTelegramAlerts(stocks: NewWatchlistStock[]): P
 
   const lines: string[] = [
     `📋 <b>新加入監控</b>（${stocks.length} 檔）`,
-    '━━━━━━━━━━━━━━━',
+    '',
   ];
 
-  for (const stock of stocks) {
+  for (let i = 0; i < stocks.length; i++) {
+    const stock = stocks[i];
     const flag = stock.market === 'TW' ? '🇹🇼' : '🇺🇸';
     const displayName = stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker;
     const sourceLabel = stock.addedBy === 'pipeline' ? '🎙️ KOL' : '🔬 AI';
     const themeLabel = stock.sectorTheme ? ` · ${stock.sectorTheme}` : '';
 
-    lines.push('');
+    if (i > 0) lines.push('');  // blank line between stocks
     lines.push(`${flag} <b>${displayName}</b>  ${sourceLabel}${themeLabel}`);
 
-    // Show top reason
     const topSource = stock.kolSources[0];
     if (topSource) {
       const prefix = stock.addedBy === 'pipeline' ? topSource.kol : '研究';
@@ -210,11 +210,10 @@ export async function sendCleanupNotification(
 
   const lines: string[] = [
     `🗑 <b>監控池清理</b>（${entries.length} 檔已移除）`,
-    '',
   ];
 
   for (const e of entries) {
-    lines.push(`• ${e.ticker} — ${e.reason}`);
+    lines.push(`  • ${e.ticker} — ${e.reason}`);
   }
 
   lines.push('');

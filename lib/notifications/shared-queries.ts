@@ -116,7 +116,8 @@ export function matchesStock(
     const normQuery = normalizeChineseChars(query).toLowerCase();
     if (normName.includes(normQuery)) return true;
   }
-  if (normalizeChineseChars(s.ticker).toLowerCase().includes(normalizeChineseChars(query).toLowerCase())) return true;
+  // Exact match on raw ticker (case-insensitive)
+  if (s.ticker.toUpperCase() === qUpper) return true;
   if (s.aliases?.length) {
     const qLower = query.toLowerCase();
     if (s.aliases.some(a => a.toLowerCase() === qLower)) return true;

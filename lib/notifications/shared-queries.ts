@@ -258,7 +258,7 @@ export type StockDetailResult = StockDetailWatchlist | StockDetailAnalyses;
 /**
  * Fetch scored opportunity items — KOL-backed stocks with recent technical alerts.
  */
-export async function fetchOpportunities(): Promise<{
+export async function fetchOpportunities(market?: 'US' | 'TW'): Promise<{
   opportunities: OpportunityItem[];
   totalStocksScanned: number;
 }> {
@@ -333,7 +333,11 @@ export async function fetchOpportunities(): Promise<{
     }
   }
 
+  // Filter by market before the slice. Taking the top 8 first and filtering
+  // afterwards left /台股機會 empty, because the MAG7 tier fills all 8 slots
+  // with US mega caps.
   const opportunities: OpportunityItem[] = [...tickerMap.values()]
+    .filter(o => !market || o.market === market)
     .sort((a, b) => {
       const aMag = MAG7.has(a.ticker.toUpperCase()) ? 1 : 0;
       const bMag = MAG7.has(b.ticker.toUpperCase()) ? 1 : 0;

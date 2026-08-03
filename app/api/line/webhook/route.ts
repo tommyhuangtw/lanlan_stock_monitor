@@ -567,8 +567,7 @@ function buildAnalysesStockBubble(detail: StockDetailAnalyses): Msg[] {
 // ============================================================
 
 async function buildOpportunityReply(market?: 'US' | 'TW'): Promise<Msg[]> {
-  const { opportunities: all, totalStocksScanned } = await fetchOpportunities();
-  const opportunities = market ? all.filter(o => o.market === market) : all;
+  const { opportunities, totalStocksScanned } = await fetchOpportunities(market);
   const scope = market === 'US' ? '🇺🇸 美股' : market === 'TW' ? '🇹🇼 台股' : '';
 
   if (opportunities.length === 0) {

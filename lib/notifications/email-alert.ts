@@ -12,6 +12,130 @@ import { supabaseAdmin } from '../supabase';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
+ * RESEND_FROM_EMAIL already carries its own display name
+ * ("AI懶人報-懶懶財經速報 <digest@ailanbao.org>"), so pass it through as-is.
+ * Wrapping it in another display name produces a nested address that Resend
+ * rejects with a 422 non-ASCII error.
+ */
+function fromAddress(): string {
+  return process.env.RESEND_FROM_EMAIL || 'digest@ailanbao.org';
+}
+
+/**
+ * Resolve the operator's alert address: notification_config first, ALERT_EMAIL as fallback.
+ */
+async function resolveAlertEmail(): Promise<string | null> {
+  const { data: config } = await supabaseAdmin
+    .from('notification_config')
+    .select('email')
+    .eq('user_identifier', 'tommy')
+    .single();
+
+  const email = config?.email || process.env.ALERT_EMAIL;
+  if (!email) {
+    log('warn', '[EmailAlert] No email configured for alerts');
+    return null;
+  }
+  return email;
+}
+
+/**
+ * Group recent failed transcription jobs by source name.
+ * A source failing every episode (陽光財經 hit 114/114) is invisible in the
+ * pipeline's own error list, because the transcriber marks those jobs failed
+ * without pushing an error — so surface it here instead.
+ */
+async function recentTranscriptionFailures(hours = 36): Promise<string[]> {
+  const since = new Date(Date.now() - hours * 3600_000).toISOString();
+  const { data: jobs } = await supabaseAdmin
+    .from('transcription_jobs')
+    .select('status, provider, episodes(source_id)')
+    .gte('created_at', since);
+
+  if (!jobs?.length) return [];
+
+  const { data: sources } = await supabaseAdmin.from('sources').select('id, name');
+  const nameById = new Map((sources || []).map(s => [s.id, s.name]));
+
+  const tally = new Map<string, { ok: number; failed: number }>();
+  for (const j of jobs) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sourceId = (j.episodes as any)?.source_id;
+    const name = nameById.get(sourceId) || '(未知來源)';
+    const t = tally.get(name) || { ok: 0, failed: 0 };
+    if (j.status === 'failed') t.failed++;
+    else if (j.status === 'completed') t.ok++;
+    tally.set(name, t);
+  }
+
+  return [...tally.entries()]
+    .filter(([, t]) => t.failed > 0)
+    .sort((a, b) => b[1].failed - a[1].failed)
+    .map(([name, t]) => `${name}：失敗 ${t.failed} / 成功 ${t.ok}`);
+}
+
+/**
+ * Email the operator when a scheduled job breaks.
+ * Best-effort: never throws, so it can't take down the job it is reporting on.
+ */
+export async function sendPipelineAlert(opts: {
+  job: string;
+  headline: string;
+  errors?: string[];
+  includeTranscriptionFailures?: boolean;
+}): Promise<boolean> {
+  try {
+    const email = await resolveAlertEmail();
+    if (!email) return false;
+
+    const failures = opts.includeTranscriptionFailures ? await recentTranscriptionFailures() : [];
+    const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+
+    const block = (title: string, items: string[], bg: string) => items.length ? `
+      <div style="margin-top:16px;padding:12px 16px;background:${bg};border-radius:8px;">
+        <strong>${title}</strong>
+        <ul style="margin:8px 0 0;padding-left:20px;font-family:ui-monospace,monospace;font-size:12px;">
+          ${items.map(e => `<li style="margin-bottom:4px;">${escapeHtml(e)}</li>`).join('')}
+        </ul>
+      </div>` : '';
+
+    const html = `
+      <!DOCTYPE html><html><head><meta charset="utf-8"></head>
+      <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1e293b;">
+        <h1 style="font-size:18px;margin:0;">🚨 ${escapeHtml(opts.job)} 執行異常</h1>
+        <p style="color:#64748b;margin:4px 0 16px;font-size:13px;">${time}</p>
+        <p style="margin:0;">${escapeHtml(opts.headline)}</p>
+        ${block(`錯誤（${opts.errors?.length || 0}）`, opts.errors || [], '#fef2f2')}
+        ${block('逐字稿失敗來源（近 36 小時）', failures, '#fffbeb')}
+        <p style="margin-top:20px;color:#94a3b8;font-size:11px;">
+          懶懶財經速報 — 系統監控通知。GitHub Actions 執行紀錄可查看完整 log。
+        </p>
+      </body></html>`;
+
+    const { error } = await resend.emails.send({
+      from: fromAddress(),
+      to: email,
+      subject: `🚨 ${opts.job} 異常：${opts.headline.slice(0, 60)}`,
+      html,
+    });
+
+    if (error) {
+      log('error', `[PipelineAlert] Send failed: ${JSON.stringify(error)}`);
+      return false;
+    }
+    log('info', `[PipelineAlert] Sent failure alert to ${email}`);
+    return true;
+  } catch (err) {
+    log('error', `[PipelineAlert] Error: ${err}`);
+    return false;
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+}
+
+/**
  * Generate a simple HTML email for stock alerts.
  */
 function generateAlertHtml(results: DetectionResult[]): string {
@@ -92,27 +216,16 @@ function generateAlertHtml(results: DetectionResult[]): string {
 export async function sendEmailAlert(detectionResults: DetectionResult[]): Promise<boolean> {
   if (detectionResults.length === 0) return false;
 
-  // Get email from notification config
-  const { data: config } = await supabaseAdmin
-    .from('notification_config')
-    .select('email')
-    .eq('user_identifier', 'tommy')
-    .single();
+  const email = await resolveAlertEmail();
+  if (!email) return false;
 
-  const email = config?.email || process.env.ALERT_EMAIL;
-  if (!email) {
-    log('warn', '[EmailAlert] No email configured for alerts');
-    return false;
-  }
-
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'digest@ailanbao.org';
   const tickerList = detectionResults.map(r => r.ticker).join(', ');
   const subject = `📊 股票觀察提醒：${tickerList}`;
   const html = generateAlertHtml(detectionResults);
 
   try {
     const { error } = await resend.emails.send({
-      from: `懶懶財經速報 <${fromEmail}>`,
+      from: fromAddress(),
       to: email,
       subject,
       html,

@@ -69,7 +69,7 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
   try {
     steps.transcribe = await transcribeAll();
     allErrors.push(...steps.transcribe.errors);
-    console.log(`  AssemblyAI - submitted: ${steps.transcribe.assemblyai.submitted}, completed: ${steps.transcribe.assemblyai.completed}, failed: ${steps.transcribe.assemblyai.failed}`);
+    console.log(`  OpenAI - submitted: ${steps.transcribe.openai.submitted}, completed: ${steps.transcribe.openai.completed}, failed: ${steps.transcribe.openai.failed}`);
     console.log(`  Apify - submitted: ${steps.transcribe.apify.submitted}, completed: ${steps.transcribe.apify.completed}, failed: ${steps.transcribe.apify.failed}`);
     console.log(`  Total poll cycles: ${steps.transcribe.totalPollCycles}`);
   } catch (error) {

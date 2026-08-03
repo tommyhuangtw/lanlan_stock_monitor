@@ -1,4 +1,5 @@
 import { runDailyPipeline } from '../lib/pipeline/runner';
+import { sendPipelineAlert } from '../lib/notifications/email-alert';
 
 async function main() {
   console.log('========================================');
@@ -25,6 +26,22 @@ async function main() {
     console.log('\n  Full result:');
     console.log(JSON.stringify(result, null, 2));
 
+    // Report transcription failures even on a "successful" run — a source that
+    // fails every episode never reaches result.errors.
+    const t = result.steps.transcribe;
+    const failedTranscripts = (t?.openai.failed || 0) + (t?.apify.failed || 0);
+
+    if (!result.success || failedTranscripts > 0) {
+      await sendPipelineAlert({
+        job: '每日 Pipeline',
+        headline: result.success
+          ? `Pipeline 完成，但有 ${failedTranscripts} 個逐字稿轉錄失敗`
+          : `Pipeline 有 ${result.errors.length} 個錯誤`,
+        errors: result.errors,
+        includeTranscriptionFailures: failedTranscripts > 0,
+      });
+    }
+
     if (!result.success) {
       process.exit(1);
     }
@@ -32,6 +49,11 @@ async function main() {
     process.exit(0);
   } catch (error) {
     console.error('\nPipeline crashed:', error);
+    await sendPipelineAlert({
+      job: '每日 Pipeline',
+      headline: 'Pipeline 中途崩潰，沒有跑完',
+      errors: [String(error)],
+    });
     process.exit(1);
   }
 }

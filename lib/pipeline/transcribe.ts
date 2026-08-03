@@ -1,11 +1,12 @@
 import { supabaseAdmin } from '../supabase';
+import { transcribeAudioUrl } from '../openai-transcribe';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export interface TranscribeResult {
-  assemblyai: { submitted: number; completed: number; failed: number };
+  openai: { submitted: number; completed: number; failed: number };
   apify: { submitted: number; completed: number; failed: number };
   totalPollCycles: number;
   errors: string[];
@@ -28,7 +29,7 @@ async function markJobFailed(jobId: number, errorMessage: string) {
  */
 export async function transcribeAll(): Promise<TranscribeResult> {
   const results: TranscribeResult = {
-    assemblyai: { submitted: 0, completed: 0, failed: 0 },
+    openai: { submitted: 0, completed: 0, failed: 0 },
     apify: { submitted: 0, completed: 0, failed: 0 },
     totalPollCycles: 0,
     errors: [],
@@ -38,55 +39,48 @@ export async function transcribeAll(): Promise<TranscribeResult> {
   // PHASE 1: Submit ALL pending jobs
   // =============================================
 
-  // Submit pending AssemblyAI (podcast) jobs
-  const { data: pendingAssemblyJobs } = await supabaseAdmin
+  // Transcribe pending OpenAI (podcast) jobs.
+  // OpenAI has no async job API — each episode is downloaded, re-encoded and
+  // transcribed inline, so these are already finished by the time PHASE 2 runs.
+  const { data: pendingOpenAIJobs } = await supabaseAdmin
     .from('transcription_jobs')
     .select(`*, episodes ( id, audio_url )`)
     .eq('status', 'pending')
-    .eq('provider', 'assemblyai')
+    .eq('provider', 'openai')
     .order('created_at', { ascending: true });
 
-  for (const job of pendingAssemblyJobs || []) {
+  for (const job of pendingOpenAIJobs || []) {
     const episode = job.episodes as unknown as { id: number; audio_url: string };
     if (!episode?.audio_url) {
       await markJobFailed(job.id, 'No audio URL');
-      results.assemblyai.failed++;
+      results.openai.failed++;
       continue;
     }
 
     try {
-      const response = await fetch('https://api.assemblyai.com/v2/transcript', {
-        method: 'POST',
-        headers: {
-          'Authorization': process.env.ASSEMBLYAI_API_KEY!,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audio_url: episode.audio_url,
-          language_code: 'zh',
-        }),
-      });
+      await supabaseAdmin
+        .from('transcription_jobs')
+        .update({ status: 'processing' })
+        .eq('id', job.id);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`AssemblyAI API error: ${errorText}`);
-      }
-
-      const result = await response.json();
+      results.openai.submitted++;
+      const transcript = await transcribeAudioUrl(episode.audio_url);
 
       await supabaseAdmin
         .from('transcription_jobs')
         .update({
-          assemblyai_id: result.id,
-          status: 'processing',
+          status: 'completed',
+          transcript,
+          completed_at: new Date().toISOString(),
         })
         .eq('id', job.id);
 
-      results.assemblyai.submitted++;
+      results.openai.completed++;
+      console.log(`  [OpenAI] job ${job.id}: ${transcript.length} chars`);
     } catch (error) {
-      results.errors.push(`Failed to submit AssemblyAI job ${job.id}: ${error}`);
+      results.errors.push(`OpenAI transcription failed for job ${job.id}: ${error}`);
       await markJobFailed(job.id, String(error));
-      results.assemblyai.failed++;
+      results.openai.failed++;
     }
   }
 
@@ -174,9 +168,7 @@ export async function transcribeAll(): Promise<TranscribeResult> {
     results.totalPollCycles++;
 
     for (const job of processingJobs) {
-      if (job.provider === 'assemblyai' && job.assemblyai_id) {
-        await checkAssemblyAIJob(job, results);
-      } else if (job.provider === 'apify' && job.apify_run_id && apifyToken) {
+      if (job.provider === 'apify' && job.apify_run_id && apifyToken) {
         await checkApifyJob(job, apifyToken, results);
       }
     }
@@ -196,55 +188,6 @@ export async function transcribeAll(): Promise<TranscribeResult> {
   }
 
   return results;
-}
-
-async function checkAssemblyAIJob(
-  job: { id: number; assemblyai_id: string },
-  results: TranscribeResult
-) {
-  try {
-    const response = await fetch(
-      `https://api.assemblyai.com/v2/transcript/${job.assemblyai_id}`,
-      {
-        headers: {
-          'Authorization': process.env.ASSEMBLYAI_API_KEY!,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      results.errors.push(`AssemblyAI API error for job ${job.id}`);
-      return;
-    }
-
-    const result = await response.json();
-
-    if (result.status === 'completed') {
-      await supabaseAdmin
-        .from('transcription_jobs')
-        .update({
-          status: 'completed',
-          transcript: result.text,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', job.id);
-
-      results.assemblyai.completed++;
-    } else if (result.status === 'error') {
-      await supabaseAdmin
-        .from('transcription_jobs')
-        .update({
-          status: 'failed',
-          error_message: result.error || 'Unknown error',
-        })
-        .eq('id', job.id);
-
-      results.assemblyai.failed++;
-    }
-    // else still processing - will check again next cycle
-  } catch (error) {
-    results.errors.push(`Error checking AssemblyAI job ${job.id}: ${error}`);
-  }
 }
 
 async function checkApifyJob(

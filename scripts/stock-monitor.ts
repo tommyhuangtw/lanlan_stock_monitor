@@ -11,7 +11,7 @@ import { fetchAndStorePrices, backfillPrices } from '../lib/stock-data';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
 import { sendLineAlerts, sendCleanupNotification } from '../lib/notifications/line';
 import type { CleanupEntry } from '../lib/notifications/line';
-import { sendEmailAlert } from '../lib/notifications/email-alert';
+import { sendEmailAlert, sendPipelineAlert } from '../lib/notifications/email-alert';
 import { generateAndSaveAliases } from '../lib/generate-aliases';
 import { supabaseAdmin } from '../lib/supabase';
 import { log } from '../lib/logger';
@@ -249,8 +249,13 @@ async function main() {
   console.log('\n=== Stock Monitor Complete ===');
 }
 
-main().catch(error => {
+main().catch(async error => {
   log('error', `Stock monitor failed: ${error}`);
   console.error('Fatal error:', error);
+  await sendPipelineAlert({
+    job: '股價監控',
+    headline: '股價監控中途崩潰，這輪提醒沒有送出',
+    errors: [String(error)],
+  });
   process.exit(1);
 });

@@ -29,7 +29,7 @@ async function main() {
     // Report transcription failures even on a "successful" run — a source that
     // fails every episode never reaches result.errors.
     const t = result.steps.transcribe;
-    const failedTranscripts = (t?.openai.failed || 0) + (t?.apify.failed || 0);
+    const failedTranscripts = (t?.assemblyai.failed || 0) + (t?.apify.failed || 0);
 
     if (!result.success || failedTranscripts > 0) {
       await sendPipelineAlert({

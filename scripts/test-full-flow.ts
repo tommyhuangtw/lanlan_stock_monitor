@@ -253,7 +253,7 @@ async function main() {
   console.log('\n=== STEP 3/6: Transcribing (AssemblyAI + Apify) ===');
   try {
     const transcribeResult = await transcribeAll();
-    console.log(`  OpenAI - submitted: ${transcribeResult.openai.submitted}, completed: ${transcribeResult.openai.completed}, failed: ${transcribeResult.openai.failed}`);
+    console.log(`  AssemblyAI - submitted: ${transcribeResult.assemblyai.submitted}, completed: ${transcribeResult.assemblyai.completed}, failed: ${transcribeResult.assemblyai.failed}`);
     console.log(`  Apify - submitted: ${transcribeResult.apify.submitted}, completed: ${transcribeResult.apify.completed}, failed: ${transcribeResult.apify.failed}`);
     console.log(`  Poll cycles: ${transcribeResult.totalPollCycles}`);
     if (transcribeResult.errors.length > 0) transcribeResult.errors.forEach(e => console.log(`    - ${e}`));

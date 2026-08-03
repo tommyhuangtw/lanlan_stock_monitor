@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../supabase';
-import { consolidateReports, generateQuickDigest, AnalysisResult } from '../openrouter';
+import { consolidateReports, generateQuickDigest, AnalysisResult, classifyEpisodeRelevance } from '../openrouter';
 import { generateHtmlTemplateWithoutMagicLink } from '../email-generator';
 import {
   generateCombinationKey,
@@ -133,7 +133,40 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
       }
     }
   }
-  const analyses = Array.from(latestBySource.values());
+  const candidates = Array.from(latestBySource.values());
+
+  // Drop episodes that are neither about individual stocks nor about the
+  // market — investing tutorials, sponsor reads, general personal finance.
+  // Deliberately done here rather than before analyze(): the analysis itself
+  // still feeds @KOL lookups and the watchlist, so only the digest skips them.
+  const verdicts = await classifyEpisodeRelevance(
+    candidates.map(a => {
+      const ep = a.episodes as unknown as { id: number; title: string; sources?: { name: string } };
+      const fa = (a.full_analysis || {}) as {
+        signals?: Array<{ ticker: string }>;
+        key_insights?: string[];
+        sectorThemes?: string[];
+      };
+      return {
+        episodeId: ep.id,
+        title: ep.title || '',
+        podcastName: ep.sources?.name || 'Unknown',
+        insights: fa.key_insights || [],
+        sectorThemes: fa.sectorThemes || [],
+        tickers: (fa.signals || []).map(s => s.ticker).filter(Boolean),
+      };
+    }),
+  );
+  const dropped = new Map(verdicts.filter(v => !v.keep).map(v => [v.episodeId, v]));
+
+  const analyses = candidates.filter(a => {
+    const ep = a.episodes as unknown as { id: number; title: string };
+    const verdict = dropped.get(ep.id);
+    if (verdict) {
+      console.log(`  [digest] 略過「${ep.title}」— ${verdict.category}：${verdict.reason}`);
+    }
+    return !verdict;
+  });
 
   const hasEpisodes = analyses.length > 0;
   const hasMarketBrief = marketBriefData.content.length > 0;

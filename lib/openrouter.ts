@@ -852,3 +852,97 @@ function generateFallbackQuickDigest(report: ConsolidatedReport): { quickDigest:
 
   return { quickDigest, marketMood };
 }
+
+// ============================================================
+// Episode relevance classification
+// ============================================================
+
+export interface RelevanceVerdict {
+  episodeId: number;
+  keep: boolean;
+  category: 'stocks' | 'market' | 'education' | 'promo' | 'offtopic';
+  reason: string;
+}
+
+const RELEVANCE_SYSTEM_PROMPT = `你是財經內容分類器。針對每一集節目，判斷它是否該收錄進「每日投資速報」。
+
+分類（category）：
+- stocks    有討論具體個股（美股或台股）
+- market    有討論市場趨勢、總經、產業前景、資金面、政策面
+- education 泛投資教學、觀念分享、名詞解釋，沒有針對當前市場或個股
+- promo     業配、推銷自家課程／訂閱服務／研究平台為主
+- offtopic  與投資理財無關
+
+keep 規則：
+- stocks 或 market → keep = true
+- education、promo、offtopic → keep = false
+- ⚠️ 判斷要看實質內容，不要只看標題。標題聳動但內容確實在談市場或個股，仍應 keep。
+- ⚠️ 寧可保留也不要誤刪。只有明顯是教學／業配／無關時才 keep = false。
+
+reason 用繁體中文，15 字以內。
+直接輸出純 JSON：{"verdicts":[{"episodeId":123,"keep":true,"category":"market","reason":"討論晶片股與資金面"}]}`;
+
+/**
+ * Classify which episodes belong in the daily digest.
+ *
+ * Runs on the already-extracted analysis (title + insights), not the raw
+ * transcript — a few hundred tokens per episode instead of ten thousand, and
+ * only the handful of episodes that actually reach the digest.
+ *
+ * Fails open: on any error every episode is kept, because dropping real
+ * content is worse than letting some noise through.
+ */
+export async function classifyEpisodeRelevance(
+  episodes: Array<{
+    episodeId: number;
+    title: string;
+    podcastName: string;
+    insights: string[];
+    sectorThemes: string[];
+    tickers: string[];
+  }>,
+): Promise<RelevanceVerdict[]> {
+  if (episodes.length === 0) return [];
+
+  const keepAll = (reason: string): RelevanceVerdict[] =>
+    episodes.map(e => ({ episodeId: e.episodeId, keep: true, category: 'market' as const, reason }));
+
+  try {
+    const response = await openrouter.chat.completions.create({
+      model: FLASH_MODEL,
+      max_tokens: 2000,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: RELEVANCE_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: episodes.map(e => [
+            `episodeId: ${e.episodeId}`,
+            `節目: ${e.podcastName}`,
+            `標題: ${e.title}`,
+            e.tickers.length ? `提及個股: ${e.tickers.join('、')}` : '提及個股: 無',
+            e.sectorThemes.length ? `產業主題: ${e.sectorThemes.join('、')}` : '',
+            e.insights.length ? `重點: ${e.insights.join(' / ')}` : '',
+          ].filter(Boolean).join('\n')).join('\n\n---\n\n'),
+        },
+      ],
+    });
+
+    const parsed = parseJsonSafe(response.choices[0]?.message?.content || '{}') as {
+      verdicts?: RelevanceVerdict[];
+    };
+    if (!Array.isArray(parsed.verdicts) || parsed.verdicts.length === 0) {
+      return keepAll('分類器無回應，保留');
+    }
+
+    // Anything the classifier didn't mention stays in.
+    const byId = new Map(parsed.verdicts.map(v => [v.episodeId, v]));
+    return episodes.map(e => byId.get(e.episodeId) ?? {
+      episodeId: e.episodeId, keep: true, category: 'market' as const, reason: '未分類，保留',
+    });
+  } catch (error) {
+    console.warn(`[classifyEpisodeRelevance] failed, keeping all: ${error}`);
+    return keepAll('分類失敗，保留');
+  }
+}

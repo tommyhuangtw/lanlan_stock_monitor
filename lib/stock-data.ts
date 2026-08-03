@@ -263,3 +263,30 @@ export async function getStoredPrices(
     volume: parseInt(row.volume) || 0,
   }));
 }
+
+// ============================================================
+// Sector classification
+// ============================================================
+
+export interface SectorProfile {
+  sector: string | null;
+  industry: string | null;
+}
+
+/**
+ * Fetch a ticker's GICS-style sector/industry from Yahoo.
+ * Returns nulls when Yahoo has no profile — ETFs and indices have none.
+ */
+export async function fetchSectorProfile(tickerNormalized: string): Promise<SectorProfile> {
+  try {
+    const r = await yahooFinance.quoteSummary(tickerNormalized, { modules: ['assetProfile'] }) as {
+      assetProfile?: { sector?: string; industry?: string };
+    };
+    return {
+      sector: r.assetProfile?.sector || null,
+      industry: r.assetProfile?.industry || null,
+    };
+  } catch {
+    return { sector: null, industry: null };
+  }
+}

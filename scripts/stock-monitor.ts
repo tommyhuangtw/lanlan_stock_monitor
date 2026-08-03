@@ -7,7 +7,8 @@
  * Run: npx tsx scripts/stock-monitor.ts [--market US|TW] [--backfill]
  */
 
-import { fetchAndStorePrices, backfillPrices } from '../lib/stock-data';
+import { fetchAndStorePrices, backfillPrices, fetchSectorProfile } from '../lib/stock-data';
+import { classifyTechStocks } from '../lib/openrouter';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
 import { sendLineAlerts, sendCleanupNotification } from '../lib/notifications/line';
 import type { CleanupEntry } from '../lib/notifications/line';
@@ -80,6 +81,54 @@ async function main() {
     }
   }
 
+  // Step 0c: Look up sectors for stocks that don't have one yet
+  {
+    console.log('\n--- Checking for stocks without sector ---');
+    const { data: noSector } = await supabaseAdmin
+      .from('watchlist_stocks')
+      .select('id, ticker, ticker_normalized, name')
+      .eq('status', 'active')
+      .is('sector_checked_at', null);
+
+    if (noSector && noSector.length > 0) {
+      console.log(`Fetching sector for ${noSector.length} stocks...`);
+      const SECTOR_BATCH = 5;
+      for (let i = 0; i < noSector.length; i += SECTOR_BATCH) {
+        const batch = noSector.slice(i, i + SECTOR_BATCH);
+        const profiles = await Promise.all(
+          batch.map(s => fetchSectorProfile(s.ticker_normalized))
+        );
+        // Yahoo supplies the facts; the model decides whether the business is
+        // tech. GICS alone puts Comcast beside Google and leaves ETFs blank.
+        const verdicts = await classifyTechStocks(
+          batch.map((s, idx) => ({
+            ticker: s.ticker,
+            name: s.name,
+            sector: profiles[idx].sector,
+            industry: profiles[idx].industry,
+          }))
+        );
+        await Promise.all(batch.map((s, idx) =>
+          supabaseAdmin
+            .from('watchlist_stocks')
+            .update({
+              sector: profiles[idx].sector,
+              industry: profiles[idx].industry,
+              is_tech: verdicts[idx].tech,
+              tech_reason: verdicts[idx].reason,
+              sector_checked_at: new Date().toISOString(),
+            })
+            .eq('id', s.id)
+        ));
+        batch.forEach((s, idx) => {
+          console.log(`  ${s.ticker_normalized}: ${verdicts[idx].tech ? '科技' : '非科技'} — ${verdicts[idx].reason}`);
+        });
+      }
+    } else {
+      console.log('All stocks have a sector.');
+    }
+  }
+
   // Step 1: Fetch latest prices
   console.log('\n--- Fetching latest prices ---');
   const priceResults = await fetchAndStorePrices(marketFilter);
@@ -112,6 +161,31 @@ async function main() {
         });
       }
       console.log(`  Archived ${failedStocks.length} stocks (fetch failures)`);
+    }
+
+    // Rule 1b: Archive anything outside tech. Runs before the market caps so
+    // the remaining slots go to the most-recently-mentioned tech names rather
+    // than being spent on banks and REITs.
+    {
+      // Reads the cached verdict — never re-classifies, so a stock can't flip
+      // between tech and non-tech across runs.
+      const { data: nonTech } = await supabaseAdmin
+        .from('watchlist_stocks')
+        .select('id, ticker_normalized, tech_reason')
+        .eq('status', 'active')
+        .eq('is_tech', false);
+
+      for (const stock of nonTech || []) {
+        await supabaseAdmin
+          .from('watchlist_stocks')
+          .update({ status: 'archived', archived_reason: 'not_tech' })
+          .eq('id', stock.id);
+        cleanupEntries.push({
+          ticker: stock.ticker_normalized,
+          reason: `非科技股（${stock.tech_reason || '不符合追蹤範圍'}）`,
+        });
+      }
+      if (nonTech?.length) console.log(`  Archived ${nonTech.length} non-tech stocks`);
     }
 
     // Rule 2 & 3: Enforce market caps (TW <= 40, US <= 60)

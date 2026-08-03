@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../supabase';
 import { consolidateReports, generateQuickDigest, AnalysisResult, classifyEpisodeRelevance } from '../openrouter';
+import { PRIORITY_KOLS } from '../notifications/shared-queries';
 import { generateHtmlTemplateWithoutMagicLink } from '../email-generator';
 import {
   generateCombinationKey,
@@ -135,12 +136,21 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
   }
   const candidates = Array.from(latestBySource.values());
 
+  // Trusted sources bypass the filter entirely — every episode of theirs runs.
+  // PRIORITY_KOLS is the existing "most trusted KOL" list (it already drives
+  // KOL opinion ordering); changing it there intentionally changes both.
+  const isTrusted = (name: string) => PRIORITY_KOLS.some(k => name.includes(k));
+
+  const trusted = candidates.filter(a =>
+    isTrusted((a.episodes as unknown as { sources?: { name: string } })?.sources?.name || ''));
+  const toClassify = candidates.filter(a => !trusted.includes(a));
+
   // Drop episodes that are neither about individual stocks nor about the
   // market — investing tutorials, sponsor reads, general personal finance.
   // Deliberately done here rather than before analyze(): the analysis itself
   // still feeds @KOL lookups and the watchlist, so only the digest skips them.
   const verdicts = await classifyEpisodeRelevance(
-    candidates.map(a => {
+    toClassify.map(a => {
       const ep = a.episodes as unknown as { id: number; title: string; sources?: { name: string } };
       const fa = (a.full_analysis || {}) as {
         signals?: Array<{ ticker: string }>;
@@ -167,6 +177,12 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
     }
     return !verdict;
   });
+
+  if (trusted.length > 0) {
+    const names = trusted.map(a =>
+      (a.episodes as unknown as { sources?: { name: string } })?.sources?.name).join('、');
+    console.log(`  [digest] 免過濾來源 ${trusted.length} 集：${names}`);
+  }
 
   const hasEpisodes = analyses.length > 0;
   const hasMarketBrief = marketBriefData.content.length > 0;

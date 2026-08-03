@@ -10,6 +10,7 @@ import {
   fetchStockDetail,
   fetchKolList,
   fetchKolOpinions,
+  fetchMajorStocks,
   type StockOpinion,
   type StockDetailWatchlist,
   type StockDetailAnalyses,
@@ -105,6 +106,12 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
+    // Command: 龍頭 — entry read on MAG7 + TSMC
+    if (cmdLower === '龍頭' || cmdLower === '大型股' || cmdLower === 'big7') {
+      await replyMessage(token, event.replyToken, withQuickReply(await buildMajorsReply(), 'majors'));
+      continue;
+    }
+
     // Command: @KOL名稱 (works with both "@股癌" and "/@股癌")
     if (cmdText.startsWith('@') && cmdText.length > 1) {
       const kolName = cmdText.slice(1).trim();
@@ -152,7 +159,7 @@ async function replyMessage(token: string, replyToken: string, messages: Msg[]) 
 // QUICK REPLY — context-aware: the page you're on is omitted
 // ============================================================
 
-type NavKey = 'opportunity' | 'us' | 'tw' | 'watchlist' | 'kol' | 'help';
+type NavKey = 'opportunity' | 'us' | 'tw' | 'majors' | 'watchlist' | 'kol' | 'help';
 
 function withQuickReply(messages: Msg[], current?: NavKey): Msg[] {
   if (messages.length === 0) return messages;
@@ -160,6 +167,7 @@ function withQuickReply(messages: Msg[], current?: NavKey): Msg[] {
     { key: 'opportunity', label: '🎯 機會', text: '/機會' },
     { key: 'us', label: '🇺🇸 美股', text: '/美股機會' },
     { key: 'tw', label: '🇹🇼 台股', text: '/台股機會' },
+    { key: 'majors', label: '👑 龍頭', text: '/龍頭' },
     { key: 'watchlist', label: '📋 清單', text: '/清單' },
     { key: 'kol', label: '📣 KOL', text: '/kol' },
     { key: 'menu', label: '📌 選單', text: '/選單' },
@@ -216,6 +224,7 @@ function buildMenuCard(): Msg {
           button('🎯 全部機會', '/機會', '#1B5E20'),
           button('🇺🇸 美股機會', '/美股機會', '#0D47A1'),
           button('🇹🇼 台股機會', '/台股機會', '#2E7D32'),
+          button('👑 龍頭股評估', '/龍頭', '#4E342E'),
           { type: 'separator', margin: 'lg' },
           { type: 'text', text: '查詢', size: 'xs', weight: 'bold', color: '#999999', margin: 'lg' },
           button('📋 追蹤清單', '/清單', '#37474F'),
@@ -254,8 +263,11 @@ function buildHelpMessage(): Msg {
       '   釘起來之後就不用再記任何指令',
       '',
       '🎯 機會 — 近期有進場訊號的股票',
-      '   依技術面 + KOL 共識度評分排序',
+      '   依技術面評分排序，Big 7 置頂',
       '   也可只看單一市場：/美股機會、/台股機會',
+      '',
+      '👑 龍頭 — Big 7 + 台積電的入場分數',
+      '   固定這 8 檔，沒訊號也會顯示現況',
       '',
       '📋 清單 — 目前追蹤中的所有股票',
       '   美股 + 台股完整清單',
@@ -796,4 +808,75 @@ async function buildWatchlistReply(): Promise<Msg[]> {
   });
 
   return messages;
+}
+
+// ============================================================
+// 龍頭 — MAG7 + TSMC entry read
+// ============================================================
+
+async function buildMajorsReply(): Promise<Msg[]> {
+  const majors = await fetchMajorStocks();
+  if (majors.length === 0) {
+    return [{ type: 'text', text: '👑 目前沒有龍頭股資料。' }];
+  }
+
+  const body: Msg[] = [];
+  for (const s of majors) {
+    const flag = s.market === 'TW' ? '🇹🇼' : '🇺🇸';
+    const currency = s.market === 'TW' ? 'NT$' : '$';
+    // Score bands, not a pass/fail: the number is a decayed sum of signals, so
+    // treat it as "how much has fired lately", not a recommendation.
+    const band = s.score >= 80 ? { text: '訊號強', color: '#1B5E20' }
+      : s.score >= 40 ? { text: '有訊號', color: '#F57F17' }
+      : s.score > 0 ? { text: '訊號弱', color: '#9E9E9E' }
+      : { text: '無訊號', color: '#BDBDBD' };
+
+    body.push({
+      type: 'box', layout: 'horizontal', margin: body.length > 0 ? 'lg' : 'none',
+      contents: [
+        { type: 'text', text: `${flag} ${s.ticker}`, size: 'sm', weight: 'bold', color: '#333333', flex: 5, wrap: true },
+        {
+          type: 'box', layout: 'vertical', cornerRadius: '4px', paddingAll: '3px', flex: 0,
+          backgroundColor: band.color + '1A',
+          contents: [{ type: 'text', text: `${Math.round(s.score)} ${band.text}`, size: 'xxs', color: band.color, align: 'center' }],
+        },
+      ],
+    });
+
+    const bits: string[] = [];
+    if (s.price) bits.push(`${currency}${s.price.toFixed(2)}`);
+    if (s.rsi !== null) bits.push(`RSI ${s.rsi.toFixed(0)}`);
+    if (s.sma50 && s.price) {
+      const d = ((s.price - s.sma50) / s.sma50) * 100;
+      bits.push(`50日均 ${d >= 0 ? '+' : ''}${d.toFixed(1)}%`);
+    }
+    body.push({ type: 'text', text: bits.join('  ｜  '), size: 'xxs', color: '#888888', margin: 'xs' });
+
+    if (s.alertLabels.length > 0) {
+      body.push({ type: 'text', text: `⚡ ${s.alertLabels.slice(0, 4).join('、')}`, size: 'xxs', color: '#E65100', wrap: true, margin: 'xs' });
+    }
+    if (!s.tracked) {
+      body.push({ type: 'text', text: '（目前未在監控池）', size: 'xxs', color: '#BDBDBD', margin: 'xs' });
+    }
+  }
+
+  return [{
+    type: 'flex',
+    altText: '👑 龍頭股入場評估',
+    contents: {
+      type: 'bubble', size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#4E342E', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '👑 龍頭股入場評估', size: 'lg', weight: 'bold', color: '#ffffff' },
+          { type: 'text', text: 'Big 7 + 台積電', size: 'xs', color: '#ffffffcc' },
+        ],
+      },
+      body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none', contents: body },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '10px',
+        contents: [{ type: 'text', text: '分數 = 近 7 日技術訊號強度（越新越重）', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true }],
+      },
+    },
+  }];
 }

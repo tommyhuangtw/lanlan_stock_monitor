@@ -400,9 +400,10 @@ export async function fetchWatchlist(): Promise<{
         labels.add(cfg.label);
       }
     }
-    if (stock.consensus === '多方共識') score += 20;
-    else if (stock.consensus === '單一來源') score += 5;
-    score += Math.min((stock.mention_count || 1) * 3, 15);
+    // Ranked on entry quality alone. KOL consensus and mention count used to
+    // add up to +35 here — comparable to a strong signal — which pushed
+    // much-discussed stocks above ones whose technicals had actually reached an
+    // entry. Consensus is still returned and shown, it just doesn't rank.
 
     const snap = sa[0]?.technical_snapshot as { rsi14?: number } | null;
     scoredStocks.push({
@@ -661,4 +662,87 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
   }
 
   return opinions.slice(0, 8);
+}
+
+// ============================================================
+// Major stocks — quick entry read on the names people actually hold
+// ============================================================
+
+/** MAG7 plus TSMC. TSLA is already in MAG7. */
+export const MAJOR_TICKERS = ['NVDA', 'META', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'TSLA', '2330.TW'];
+
+export interface MajorStock {
+  ticker: string;
+  displayName: string;
+  market: string;
+  price: number | null;
+  rsi: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  score: number;
+  alertLabels: string[];
+  tracked: boolean;
+}
+
+/**
+ * Entry read on the majors, in MAJOR_TICKERS order.
+ *
+ * Scored the same way the watchlist is — decayed alert scores — so the numbers
+ * mean the same thing everywhere. A stock with no recent signal still appears,
+ * with a score of 0 and its current technicals, because "nothing to do here" is
+ * the answer being asked for.
+ */
+export async function fetchMajorStocks(): Promise<MajorStock[]> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const { data: stocks } = await supabaseAdmin
+    .from('watchlist_stocks')
+    .select('ticker, ticker_normalized, market, name, current_price, status')
+    .in('ticker_normalized', MAJOR_TICKERS);
+
+  const { data: alerts } = await supabaseAdmin
+    .from('stock_alerts')
+    .select('ticker, alert_type, created_at')
+    .gte('created_at', sevenDaysAgo.toISOString());
+
+  const alertsByTicker = new Map<string, typeof alerts>();
+  for (const a of alerts || []) {
+    alertsByTicker.set(a.ticker, [...(alertsByTicker.get(a.ticker) || []), a]);
+  }
+
+  const out: MajorStock[] = [];
+  for (const normalized of MAJOR_TICKERS) {
+    const stock = (stocks || []).find(s => s.ticker_normalized === normalized);
+    if (!stock) continue;
+
+    const prices = await getStoredPrices(normalized, 250);
+    const snapshot = prices.length >= 14 ? computeTechnicalSnapshot(prices) : null;
+
+    const mine = alertsByTicker.get(stock.ticker) || alertsByTicker.get(normalized) || [];
+    let score = 0;
+    const labels = new Set<string>();
+    for (const a of mine) {
+      const cfg = ALERT_TYPE_CONFIG[a.alert_type];
+      if (!cfg) continue;
+      const age = (Date.now() - new Date(a.created_at).getTime()) / 86400000;
+      score += cfg.score * (0.5 + 0.5 * Math.max(0, 1 - age / 7));
+      labels.add(cfg.label);
+    }
+
+    out.push({
+      ticker: stock.ticker,
+      displayName: stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker,
+      market: stock.market,
+      price: stock.current_price ?? snapshot?.currentPrice ?? null,
+      rsi: snapshot?.rsi14 ?? null,
+      sma50: snapshot?.sma50 ?? null,
+      sma200: snapshot?.sma200 ?? null,
+      score,
+      alertLabels: [...labels],
+      tracked: stock.status === 'active',
+    });
+  }
+
+  return out.sort((a, b) => b.score - a.score);
 }

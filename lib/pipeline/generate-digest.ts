@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../supabase';
-import { consolidateReports, generateQuickDigest, AnalysisResult, classifyEpisodeRelevance } from '../openrouter';
+import { consolidateReports, generateQuickDigest, AnalysisResult, classifyEpisodeRelevance, isEmptyAnalysis } from '../openrouter';
 import { PRIORITY_KOLS } from '../notifications/shared-queries';
 import { generateHtmlTemplateWithoutMagicLink } from '../email-generator';
 import {
@@ -19,6 +19,8 @@ export interface GenerateDigestResult {
   episodeCount: number;
   skipped: boolean;
   errors: string[];
+  /** Episodes whose analysis came back completely empty — a bug, not quiet content. */
+  emptyAnalyses: string[];
 }
 
 export async function generateDigest(): Promise<GenerateDigestResult> {
@@ -28,6 +30,7 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
     episodeCount: 0,
     skipped: false,
     errors: [],
+    emptyAnalyses: [],
   };
 
   const today = new Date();
@@ -136,14 +139,25 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
   }
   const candidates = Array.from(latestBySource.values());
 
+  // An empty analysis carries no content to summarise, so it never belongs in
+  // the digest — including for trusted sources. Recorded for the alert email:
+  // this means analyzeTranscript produced nothing, which is a bug worth seeing.
+  const withContent = candidates.filter(a => {
+    const ep = a.episodes as unknown as { title: string; sources?: { name: string } };
+    if (!isEmptyAnalysis(a.full_analysis as AnalysisResult)) return true;
+    results.emptyAnalyses.push(`${ep.sources?.name || '?'}｜${ep.title || '?'}`);
+    console.warn(`  [digest] 分析全空，略過並回報：「${ep.title}」`);
+    return false;
+  });
+
   // Trusted sources bypass the filter entirely — every episode of theirs runs.
   // PRIORITY_KOLS is the existing "most trusted KOL" list (it already drives
   // KOL opinion ordering); changing it there intentionally changes both.
   const isTrusted = (name: string) => PRIORITY_KOLS.some(k => name.includes(k));
 
-  const trusted = candidates.filter(a =>
+  const trusted = withContent.filter(a =>
     isTrusted((a.episodes as unknown as { sources?: { name: string } })?.sources?.name || ''));
-  const toClassify = candidates.filter(a => !trusted.includes(a));
+  const toClassify = withContent.filter(a => !trusted.includes(a));
 
   // Drop episodes that are neither about individual stocks nor about the
   // market — investing tutorials, sponsor reads, general personal finance.
@@ -169,7 +183,7 @@ export async function generateDigest(): Promise<GenerateDigestResult> {
   );
   const dropped = new Map(verdicts.filter(v => !v.keep).map(v => [v.episodeId, v]));
 
-  const analyses = candidates.filter(a => {
+  const analyses = withContent.filter(a => {
     const ep = a.episodes as unknown as { id: number; title: string };
     const verdict = dropped.get(ep.id);
     if (verdict) {

@@ -30,14 +30,24 @@ async function main() {
     // fails every episode never reaches result.errors.
     const t = result.steps.transcribe;
     const failedTranscripts = (t?.assemblyai.failed || 0) + (t?.apify.failed || 0);
+    // An empty analysis means analyzeTranscript returned nothing usable — the
+    // episode is silently missing from the digest, so it needs to be reported.
+    const empty = result.steps.digest?.emptyAnalyses || [];
 
-    if (!result.success || failedTranscripts > 0) {
+    if (!result.success || failedTranscripts > 0 || empty.length > 0) {
+      const problems = [
+        !result.success && `${result.errors.length} 個錯誤`,
+        failedTranscripts > 0 && `${failedTranscripts} 個逐字稿轉錄失敗`,
+        empty.length > 0 && `${empty.length} 集分析全空`,
+      ].filter(Boolean).join('、');
+
       await sendPipelineAlert({
         job: '每日 Pipeline',
-        headline: result.success
-          ? `Pipeline 完成，但有 ${failedTranscripts} 個逐字稿轉錄失敗`
-          : `Pipeline 有 ${result.errors.length} 個錯誤`,
-        errors: result.errors,
+        headline: result.success ? `Pipeline 完成，但有 ${problems}` : `Pipeline 有 ${problems}`,
+        errors: [
+          ...result.errors,
+          ...empty.map(e => `分析全空（已排除於日報）：${e}`),
+        ],
         includeTranscriptionFailures: failedTranscripts > 0,
       });
     }

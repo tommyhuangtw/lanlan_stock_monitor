@@ -312,6 +312,19 @@ const ANALYSIS_SYSTEM_PROMPT = `⚠️⚠️ 最重要規則：所有輸出內�
   ]
 }`;
 
+/**
+ * True when the model gave us nothing usable — every list empty and no summary.
+ * Distinct from "zero signals", which is normal for a macro episode: those
+ * still carry key_insights, sectorThemes or episodeHighlights.
+ */
+export function isEmptyAnalysis(a: Partial<AnalysisResult> | null | undefined): boolean {
+  if (!a) return true;
+  const empty = (v: unknown) => !Array.isArray(v) || v.length === 0;
+  return empty(a.signals) && empty(a.key_insights) && empty(a.episodeHighlights)
+    && empty(a.sectorThemes) && empty(a.catalysts) && empty(a.riskAlerts)
+    && !(a.summary || '').trim();
+}
+
 export async function analyzeTranscript(transcript: string, episodeTitle: string, podcastName?: string): Promise<AnalysisResult> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -340,6 +353,14 @@ ${transcript.slice(0, 40000)}`
 
       const result = parseJsonSafe(content) as AnalysisResult;
       result.podcastName = podcastName || 'Unknown';
+
+      // A result with nothing in it at all is a failed parse, not a quiet
+      // episode: truncated JSON can survive repairJson as a valid but empty
+      // object, and the back-fill below would then store it as a success.
+      // Genuine macro episodes still carry insights/highlights.
+      if (isEmptyAnalysis(result)) {
+        throw new Error('Model returned an empty analysis (likely truncated or unparseable JSON)');
+      }
 
       // Ensure required arrays exist (AI may omit them)
       if (!Array.isArray(result.signals)) result.signals = [];

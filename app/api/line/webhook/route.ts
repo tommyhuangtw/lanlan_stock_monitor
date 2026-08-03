@@ -85,9 +85,23 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    // Command: 機會 / opportunity
+    // Command: 選單 — a pinnable control panel, so nobody has to recall commands
+    if (cmdLower === '選單' || cmdLower === 'menu') {
+      await replyMessage(token, event.replyToken, [buildMenuCard()]);
+      continue;
+    }
+
+    // Command: 機會 / 美股機會 / 台股機會
     if (cmdLower === '機會' || cmdLower === 'opportunity') {
       await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply(), 'opportunity'));
+      continue;
+    }
+    if (cmdLower === '美股機會' || cmdLower === 'us') {
+      await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply('US'), 'us'));
+      continue;
+    }
+    if (cmdLower === '台股機會' || cmdLower === 'tw') {
+      await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply('TW'), 'tw'));
       continue;
     }
 
@@ -138,14 +152,17 @@ async function replyMessage(token: string, replyToken: string, messages: Msg[]) 
 // QUICK REPLY — context-aware: the page you're on is omitted
 // ============================================================
 
-type NavKey = 'opportunity' | 'watchlist' | 'kol' | 'help';
+type NavKey = 'opportunity' | 'us' | 'tw' | 'watchlist' | 'kol' | 'help';
 
 function withQuickReply(messages: Msg[], current?: NavKey): Msg[] {
   if (messages.length === 0) return messages;
-  const all: Array<{ key: NavKey; label: string; text: string }> = [
+  const all: Array<{ key: string; label: string; text: string }> = [
     { key: 'opportunity', label: '🎯 機會', text: '/機會' },
+    { key: 'us', label: '🇺🇸 美股', text: '/美股機會' },
+    { key: 'tw', label: '🇹🇼 台股', text: '/台股機會' },
     { key: 'watchlist', label: '📋 清單', text: '/清單' },
     { key: 'kol', label: '📣 KOL', text: '/kol' },
+    { key: 'menu', label: '📌 選單', text: '/選單' },
     { key: 'help', label: '❓ 說明', text: '/說明' },
   ];
   const last = messages[messages.length - 1];
@@ -155,6 +172,65 @@ function withQuickReply(messages: Msg[], current?: NavKey): Msg[] {
       .map(b => ({ type: 'action', action: { type: 'message', label: b.label, text: b.text } })),
   };
   return messages;
+}
+
+// ============================================================
+// 選單 — pinnable control panel
+// ============================================================
+
+/**
+ * A Flex card of command buttons, meant to be pinned as the group's 公告.
+ *
+ * Rich menus can't cover this: they're linked per user ID with no group-level
+ * binding, and they don't render on LINE for macOS/Windows at all. Buttons
+ * inside a Flex message stay tappable no matter how old the message is, so a
+ * pinned card gives the same "never type a command" result on every client.
+ */
+function buildMenuCard(): Msg {
+  const button = (label: string, text: string, color: string) => ({
+    type: 'button',
+    style: 'primary',
+    height: 'sm',
+    margin: 'sm',
+    color,
+    action: { type: 'message', label, text },
+  });
+
+  return {
+    type: 'flex',
+    altText: '📌 懶懶財經選單',
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#1B5E20', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: '📌 懶懶財經選單', size: 'lg', weight: 'bold', color: '#ffffff' },
+          { type: 'text', text: '點按鈕就好，不用記指令', size: 'xs', color: '#ffffffcc' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none',
+        contents: [
+          { type: 'text', text: '進場機會', size: 'xs', weight: 'bold', color: '#999999' },
+          button('🎯 全部機會', '/機會', '#1B5E20'),
+          button('🇺🇸 美股機會', '/美股機會', '#0D47A1'),
+          button('🇹🇼 台股機會', '/台股機會', '#2E7D32'),
+          { type: 'separator', margin: 'lg' },
+          { type: 'text', text: '查詢', size: 'xs', weight: 'bold', color: '#999999', margin: 'lg' },
+          button('📋 追蹤清單', '/清單', '#37474F'),
+          button('📣 KOL 列表', '/kol', '#4A148C'),
+          button('❓ 使用說明', '/說明', '#616161'),
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', paddingAll: '12px',
+        contents: [
+          { type: 'text', text: '長按這則訊息 →「公告」可釘選在群組上方', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
+        ],
+      },
+    },
+  };
 }
 
 // ============================================================
@@ -174,8 +250,12 @@ function buildHelpMessage(): Msg {
       '🎯 快捷按鈕（點下方按鈕）',
       '───────────',
       '',
+      '📌 選單 — 按鈕面板，可長按釘選成群組公告',
+      '   釘起來之後就不用再記任何指令',
+      '',
       '🎯 機會 — 近期有進場訊號的股票',
       '   依技術面 + KOL 共識度評分排序',
+      '   也可只看單一市場：/美股機會、/台股機會',
       '',
       '📋 清單 — 目前追蹤中的所有股票',
       '   美股 + 台股完整清單',
@@ -474,11 +554,18 @@ function buildAnalysesStockBubble(detail: StockDetailAnalyses): Msg[] {
 // 機會 (OPPORTUNITY) — KOL bullish stocks at attractive levels
 // ============================================================
 
-async function buildOpportunityReply(): Promise<Msg[]> {
-  const { opportunities, totalStocksScanned } = await fetchOpportunities();
+async function buildOpportunityReply(market?: 'US' | 'TW'): Promise<Msg[]> {
+  const { opportunities: all, totalStocksScanned } = await fetchOpportunities();
+  const opportunities = market ? all.filter(o => o.market === market) : all;
+  const scope = market === 'US' ? '🇺🇸 美股' : market === 'TW' ? '🇹🇼 台股' : '';
 
   if (opportunities.length === 0) {
-    return [{ type: 'text', text: '🎯 近 7 日沒有偵測到進場機會。\n\n系統每日掃描追蹤股票的技術訊號（回檔、RSI超賣、均線支撐等），有機會時會自動通知。' }];
+    return [{
+      type: 'text',
+      text: market
+        ? `🎯 近 7 日${scope}沒有偵測到進場機會。\n\n輸入 /機會 查看全部市場。`
+        : '🎯 近 7 日沒有偵測到進場機會。\n\n系統每日掃描追蹤股票的技術訊號（回檔、RSI超賣、均線支撐等），有機會時會自動通知。',
+    }];
   }
 
   const body: Msg[] = [];
@@ -513,14 +600,14 @@ async function buildOpportunityReply(): Promise<Msg[]> {
 
   return [{
     type: 'flex',
-    altText: `🎯 進場機會（${opportunities.length} 檔）`,
+    altText: `🎯 ${scope}進場機會（${opportunities.length} 檔）`,
     contents: {
       type: 'bubble',
       size: 'mega',
       header: {
         type: 'box', layout: 'vertical', backgroundColor: '#1B5E20', paddingAll: '16px',
         contents: [
-          { type: 'text', text: '🎯 進場機會', size: 'lg', weight: 'bold', color: '#ffffff' },
+          { type: 'text', text: `🎯 ${scope}進場機會`.trim(), size: 'lg', weight: 'bold', color: '#ffffff' },
           { type: 'text', text: 'KOL 看好 + 技術面訊號', size: 'xs', color: '#ffffffcc' },
         ],
       },

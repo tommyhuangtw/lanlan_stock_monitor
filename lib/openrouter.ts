@@ -129,6 +129,9 @@ export const openrouter = new OpenAI({
 export const PRO_MODEL = 'google/gemini-3.1-pro-preview';
 // Flash model for lighter tasks (quick digest, simple processing)
 export const FLASH_MODEL = 'google/gemini-3-flash-preview';
+// Cheapest tier — used for one-shot classification where the input is already
+// factual (ticker + Yahoo sector) and the output is a boolean plus a label.
+export const LITE_MODEL = 'google/gemini-3.5-flash-lite';
 
 // Types matching n8n workflow output structure
 export interface Signal {
@@ -1024,7 +1027,7 @@ export async function classifyTechStocks(
 
   try {
     const response = await openrouter.chat.completions.create({
-      model: FLASH_MODEL,
+      model: LITE_MODEL,
       max_tokens: 4000,
       temperature: 0,
       response_format: { type: 'json_object' },

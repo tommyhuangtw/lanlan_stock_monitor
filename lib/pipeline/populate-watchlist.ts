@@ -10,7 +10,7 @@
 import { supabaseAdmin } from '../supabase';
 import { normalizeTicker, parsePriceLevels, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
-import type { NewWatchlistStock } from '../notifications/telegram';
+import type { NewWatchlistStock } from '../notifications/line';
 
 export interface PopulateWatchlistResult {
   newStocks: number;

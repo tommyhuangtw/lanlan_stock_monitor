@@ -9,8 +9,8 @@
 
 import { fetchAndStorePrices, backfillPrices } from '../lib/stock-data';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
-import { sendTelegramAlerts, sendCleanupNotification } from '../lib/notifications/telegram';
-import type { CleanupEntry } from '../lib/notifications/telegram';
+import { sendLineAlerts, sendCleanupNotification } from '../lib/notifications/line';
+import type { CleanupEntry } from '../lib/notifications/line';
 import { sendEmailAlert } from '../lib/notifications/email-alert';
 import { generateAndSaveAliases } from '../lib/generate-aliases';
 import { supabaseAdmin } from '../lib/supabase';
@@ -206,11 +206,11 @@ async function main() {
   // Update alert status
   const alertIds: number[] = [];
 
-  // Telegram notifications
-  const telegramSent = await sendTelegramAlerts(detectionResults);
-  console.log(`Telegram: ${telegramSent} messages sent`);
-  if (telegramSent > 0) {
-    // Mark alerts as sent via Telegram
+  // LINE notifications
+  const lineSent = await sendLineAlerts(detectionResults);
+  console.log(`LINE: ${lineSent} messages sent`);
+  if (lineSent > 0) {
+    // Mark alerts as sent via LINE
     for (const result of detectionResults) {
       const { data: alerts } = await supabaseAdmin
         .from('stock_alerts')
@@ -233,7 +233,7 @@ async function main() {
   // Update sent status
   if (alertIds.length > 0) {
     const sentVia = [];
-    if (telegramSent > 0) sentVia.push('telegram');
+    if (lineSent > 0) sentVia.push('line');
     if (emailSent) sentVia.push('email');
 
     await supabaseAdmin

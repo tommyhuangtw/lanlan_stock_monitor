@@ -6,8 +6,7 @@ import { populateWatchlist, PopulateWatchlistResult } from './populate-watchlist
 import { expandSectors, ExpandSectorsResult } from './expand-sectors';
 import { generateDigest, GenerateDigestResult } from './generate-digest';
 import { sendEmails, SendEmailsResult } from './send-emails';
-import { sendNewStockTelegramAlerts } from '../notifications/telegram';
-// import { sendNewStockAlerts } from '../notifications/line'; // [DEPRECATED] Migrated to Telegram
+import { sendNewStockAlerts } from '../notifications/line';
 
 export interface PipelineResult {
   startedAt: string;
@@ -113,17 +112,17 @@ export async function runDailyPipeline(): Promise<PipelineResult> {
     // Non-blocking: don't push to allErrors
   }
 
-  // === Notify new watchlist stocks via Telegram ===
+  // === Notify new watchlist stocks via LINE ===
   const allNewStocks = [
     ...(steps.watchlist?.newStockDetails || []),
     ...(steps.sectorExpansion?.newStockDetails || []),
   ];
   if (allNewStocks.length > 0) {
-    console.log(`\n  Sending Telegram notifications for ${allNewStocks.length} new watchlist stocks...`);
+    console.log(`\n  Sending LINE notifications for ${allNewStocks.length} new watchlist stocks...`);
     try {
-      await sendNewStockTelegramAlerts(allNewStocks);
+      await sendNewStockAlerts(allNewStocks);
     } catch (error) {
-      console.error(`  New stock Telegram notification failed (non-blocking): ${error}`);
+      console.error(`  New stock LINE notification failed (non-blocking): ${error}`);
     }
   }
 

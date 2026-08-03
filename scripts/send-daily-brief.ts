@@ -1,7 +1,7 @@
 /**
- * Daily Brief Push Notification (Telegram)
+ * Daily Brief Push Notification (LINE)
  *
- * Sends a daily summary to Telegram group showing:
+ * Sends a daily summary to the LINE group showing:
  * - Stocks with recent entry signals (last 24h) with detailed reasons
  * - Current price and KOL consensus
  * - Total monitoring stats
@@ -11,13 +11,12 @@
  */
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
+import { sendLineText } from '../lib/notifications/line';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!
 );
-
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
 // Signal weights for scoring — higher = more actionable
 const SIGNAL_WEIGHTS: Record<string, number> = {
@@ -31,31 +30,6 @@ const SIGNAL_WEIGHTS: Record<string, number> = {
   ai_entry_signal: 15,
   volume_surge: 10,
 };
-
-async function sendTelegram(text: string): Promise<boolean> {
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId) {
-    console.error('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID');
-    return false;
-  }
-
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error(`Telegram send failed: ${res.status} ${await res.text()}`);
-    return false;
-  }
-  return true;
-}
 
 interface AlertedStock {
   displayName: string;
@@ -164,7 +138,7 @@ async function main() {
 
   const hasStrongSignal = topPicks.some(p => p.score > 20);
 
-  // Build Telegram HTML message
+  // Build LINE plain-text message
   const today = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' });
   const subText = topPicks.length > 0
     ? hasStrongSignal
@@ -173,7 +147,7 @@ async function main() {
     : '近 24 小時無新訊號';
 
   const lines: string[] = [
-    `📊 <b>${today} 市場觀察</b>`,
+    `📊 ${today} 市場觀察`,
     subText,
     '',
   ];
@@ -184,7 +158,7 @@ async function main() {
       const currency = pick.market === 'TW' ? 'NT$' : '$';
       const priceStr = pick.currentPrice ? `  ${currency}${pick.currentPrice.toFixed(2)}` : '';
 
-      lines.push(`${emoji} <b>${pick.displayName}</b>${priceStr}`);
+      lines.push(`${emoji} ${pick.displayName}${priceStr}`);
       lines.push(`⚡ ${pick.primaryReason}`);
 
       // RSI bar if oversold
@@ -208,7 +182,7 @@ async function main() {
   lines.push('━━━━━━━━━━━━━━━');
   lines.push(`🇺🇸 ${usCount} 檔  🇹🇼 ${twCount} 檔  共 ${stocks.length} 檔監控`);
 
-  const ok = await sendTelegram(lines.join('\n'));
+  const ok = await sendLineText(lines.join('\n'));
   if (ok) {
     console.log(`Daily brief sent! ${topPicks.length} stocks highlighted, ${stocks.length} total monitored.`);
   } else {

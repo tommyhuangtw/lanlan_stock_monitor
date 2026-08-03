@@ -114,7 +114,11 @@ export function matchesStock(
   if (s.name) {
     const normName = normalizeChineseChars(s.name).toLowerCase();
     const normQuery = normalizeChineseChars(query).toLowerCase();
-    if (normName.includes(normQuery)) return true;
+    // Require 2+ chars: a 1-char query substring-matches almost every name
+    // (e.g. "T" hit Costco). Single-char tickers still resolve via exact match below.
+    // ponytail: length guard only; 2-char queries can still be loose (e.g. "ai").
+    // Tighten to prefix/word-boundary matching if that shows up in practice.
+    if (normQuery.length >= 2 && normName.includes(normQuery)) return true;
   }
   // Exact match on raw ticker (case-insensitive)
   if (s.ticker.toUpperCase() === qUpper) return true;
@@ -592,11 +596,14 @@ async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
       const normTicker = normalizeChineseChars(sig.ticker).toLowerCase();
       const twNum = q.replace(/\.TWO?$/, '');
       const aliasTarget = TICKER_ALIASES[q];
+      // Same guard as matchesStock: substring matching needs 2+ chars, or a
+      // 1-char query pulls in every ticker containing that letter.
+      const loose = q.length >= 2;
       if (
         ticker !== q &&
-        !ticker.includes(q) &&
-        !ticker.includes(twNum) &&
-        !normTicker.includes(normQuery) &&
+        !(loose && ticker.includes(q)) &&
+        !(loose && ticker.includes(twNum)) &&
+        !(loose && normTicker.includes(normQuery)) &&
         !(aliasTarget && ticker.includes(aliasTarget.replace(/\.TWO?$/, '')))
       ) continue;
 

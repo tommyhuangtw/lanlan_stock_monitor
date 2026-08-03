@@ -1,44 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { getStoredPrices } from '@/lib/stock-data';
-import { computeTechnicalSnapshot, type TechnicalSnapshot } from '@/lib/technical-indicators';
+import {
+  ALERT_TYPE_CONFIG,
+  SENTIMENT_ICON,
+  FEATURED_KOL_KEYWORDS,
+  formatShortDate,
+  extractKolKeyword,
+  fetchOpportunities,
+  fetchWatchlist,
+  fetchStockDetail,
+  fetchKolList,
+  fetchKolOpinions,
+  type StockOpinion,
+  type StockDetailWatchlist,
+  type StockDetailAnalyses,
+  type WatchlistStockRow,
+  type Source,
+} from '@/lib/notifications/shared-queries';
 
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Msg = any;
 
-const ALERT_TYPE_CONFIG: Record<string, { label: string; detail: string; score: number }> = {
-  significant_drop_20pct: { label: '大幅回檔', detail: '從52週高點回檔逾20%', score: 30 },
-  rsi_oversold: { label: 'RSI 超賣', detail: 'RSI < 30，市場可能超賣', score: 25 },
-  significant_drop_10pct: { label: '回檔 10%', detail: '從近20日高點回檔逾10%', score: 20 },
-  near_kol_support: { label: '接近支撐', detail: '接近 KOL 提及的支撐價位', score: 15 },
-  sma_support: { label: '均線支撐', detail: '觸及50日或200日均線後反彈', score: 15 },
-  significant_drop_5pct: { label: '回檔 5%', detail: '從近20日高點回檔逾5%', score: 10 },
-  consolidation: { label: '盤整待突破', detail: '價格區間收窄，留意突破方向', score: 10 },
-  ai_entry_signal: { label: 'AI 訊號', detail: 'AI 偵測到入場機會', score: 15 },
-  volume_surge: { label: '量能異常', detail: '成交量異常放大（≥2倍均量）', score: 10 },
-};
-
-const SENTIMENT_ICON: Record<string, string> = {
-  bullish: '📈',
-  bearish: '📉',
-  monitor: '👀',
-};
-
 /**
  * LINE Webhook endpoint.
- * All commands require "/" prefix (except @KOL which uses "@").
- * Messages without prefix are ignored to avoid false alarms in group chats.
  *
- * Commands:
- * - /說明, /help, /指令 → usage guide
- * - /機會 → KOL bullish stocks at attractive technical levels
- * - /清單, /追蹤 → watchlist with entry opportunities
- * - /kol → list all available KOLs
- * - @KOL名稱 → KOL recent opinions
- * - /TSLA, /2330, /台積電 → stock detail
- * - /groupid → group ID echo (admin)
+ * This module is a Flex-rendering layer only — all data access lives in
+ * lib/notifications/shared-queries.ts, shared with the Telegram webhook so
+ * query fixes land on both channels at once.
+ *
+ * All commands require "/" prefix (except @KOL which uses "@").
+ * Messages without a prefix are ignored to avoid false alarms in group chats.
+ *
+ * Reply messages are free — they don't count toward the LINE message quota.
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -59,11 +53,9 @@ export async function POST(request: NextRequest) {
     const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (!token) continue;
 
-    // Only respond to messages with "/" prefix or "@" prefix
-    // This prevents false alarms from group chat conversations
+    // Only respond to "/" or "@" prefixed messages — avoids false alarms in groups
     if (!rawText.startsWith('/') && !rawText.startsWith('@')) continue;
 
-    // Strip "/" prefix and parse command
     const cmdText = rawText.startsWith('/') ? rawText.slice(1).trim() : rawText;
     const cmdLower = cmdText.toLowerCase();
 
@@ -76,26 +68,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Command: 說明 / help / 指令
-    if (cmdLower === '說明' || cmdLower === 'help' || cmdLower === '指令') {
-      await replyMessage(token, event.replyToken, withQuickReply([buildHelpMessage()]));
+    if (cmdLower === '說明' || cmdLower === 'help' || cmdLower === '指令' || cmdLower === 'start') {
+      await replyMessage(token, event.replyToken, withQuickReply([buildHelpMessage()], 'help'));
       continue;
     }
 
     // Command: 清單 / 追蹤
     if (cmdLower === '清單' || cmdLower === '追蹤') {
-      await replyMessage(token, event.replyToken, withQuickReply(await buildWatchlistReply()));
+      await replyMessage(token, event.replyToken, withQuickReply(await buildWatchlistReply(), 'watchlist'));
       continue;
     }
 
-    // Command: KOL list
+    // Command: kol
     if (cmdLower === 'kol') {
-      await replyMessage(token, event.replyToken, withQuickReply(await buildKolListReply()));
+      await replyMessage(token, event.replyToken, withQuickReply(await buildKolListReply(), 'kol'));
       continue;
     }
 
     // Command: 機會 / opportunity
     if (cmdLower === '機會' || cmdLower === 'opportunity') {
-      await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply()));
+      await replyMessage(token, event.replyToken, withQuickReply(await buildOpportunityReply(), 'opportunity'));
       continue;
     }
 
@@ -110,14 +102,13 @@ export async function POST(request: NextRequest) {
     if (cmdText.length > 0 && cmdText.length <= 20) {
       const stockReply = await buildStockReply(cmdText);
       if (stockReply) {
-        await replyMessage(token, event.replyToken, stockReply);
+        await replyMessage(token, event.replyToken, withQuickReply(stockReply));
         continue;
       }
-      // Stock not found — let user know
-      await replyMessage(token, event.replyToken, [{
+      await replyMessage(token, event.replyToken, withQuickReply([{
         type: 'text',
         text: `🔍 找不到「${cmdText}」\n\n輸入 /清單 查看所有追蹤股票\n輸入 /說明 查看指令`,
-      }]);
+      }]));
       continue;
     }
   }
@@ -125,8 +116,12 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ status: 'ok' });
 }
 
+export async function GET() {
+  return NextResponse.json({ status: 'ok' });
+}
+
 async function replyMessage(token: string, replyToken: string, messages: Msg[]) {
-  await fetch(LINE_REPLY_URL, {
+  const res = await fetch(LINE_REPLY_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -134,22 +129,30 @@ async function replyMessage(token: string, replyToken: string, messages: Msg[]) 
     },
     body: JSON.stringify({ replyToken, messages }),
   });
+  if (!res.ok) {
+    console.error('[LINE Webhook] reply failed:', res.status, await res.text());
+  }
 }
 
 // ============================================================
-// QUICK REPLY HELPER
+// QUICK REPLY — context-aware: the page you're on is omitted
 // ============================================================
 
-function withQuickReply(messages: Msg[]): Msg[] {
+type NavKey = 'opportunity' | 'watchlist' | 'kol' | 'help';
+
+function withQuickReply(messages: Msg[], current?: NavKey): Msg[] {
   if (messages.length === 0) return messages;
+  const all: Array<{ key: NavKey; label: string; text: string }> = [
+    { key: 'opportunity', label: '🎯 機會', text: '/機會' },
+    { key: 'watchlist', label: '📋 清單', text: '/清單' },
+    { key: 'kol', label: '📣 KOL', text: '/kol' },
+    { key: 'help', label: '❓ 說明', text: '/說明' },
+  ];
   const last = messages[messages.length - 1];
   last.quickReply = {
-    items: [
-      { type: 'action', action: { type: 'message', label: '🎯 機會', text: '/機會' } },
-      { type: 'action', action: { type: 'message', label: '📣 KOL', text: '/kol' } },
-      { type: 'action', action: { type: 'message', label: '📋 清單', text: '/清單' } },
-      { type: 'action', action: { type: 'message', label: '❓ 說明', text: '/說明' } },
-    ],
+    items: all
+      .filter(b => b.key !== current)
+      .map(b => ({ type: 'action', action: { type: 'message', label: b.label, text: b.text } })),
   };
   return messages;
 }
@@ -162,35 +165,42 @@ function buildHelpMessage(): Msg {
   return {
     type: 'text',
     text: [
-      '📋 可用指令（需加 / 前綴）：',
+      '👋 歡迎使用懶懶財經 Bot！',
       '',
-      '/機會 → KOL 看好 + 技術面偏低的股票',
-      '/清單 → 入場機會 + 所有追蹤股票',
-      '/kol → 查看所有 KOL 列表',
-      '/說明 → 顯示此說明',
-      '',
-      '🔍 查個股：/ + 代號或名稱',
-      '  例：/TSLA、/2330、/台積電',
-      '',
-      '📣 查 KOL：@ + KOL名稱',
-      '  例：@股癌、@NaNa',
+      '我會自動追蹤 KOL 推薦的股票，',
+      '當技術面出現好的進場時機時通知你。',
       '',
       '───────────',
-      '📖 系統運作說明',
+      '🎯 快捷按鈕（點下方按鈕）',
+      '───────────',
       '',
-      '追蹤股票來源：',
-      '• KOL podcast 中提到看多的股票',
-      '• AI 自動擴展相關產業概念股',
+      '🎯 機會 — 近期有進場訊號的股票',
+      '   依技術面 + KOL 共識度評分排序',
       '',
-      '入場機會分數：',
-      '• 技術訊號（回檔、RSI超賣、均線支撐等）',
-      '• KOL 共識越多 → 分數越高',
-      '• 訊號越新 → 分數越高',
+      '📋 清單 — 目前追蹤中的所有股票',
+      '   美股 + 台股完整清單',
       '',
-      '市場熱度（RSI 0-100）：',
-      '• 0-30 偏冷（可能接近低點）',
-      '• 30-60 中性',
-      '• 60-100 偏熱（追高風險大）',
+      '📣 KOL — 追蹤的 KOL 列表',
+      '   點擊 KOL 名稱查看他的觀點',
+      '',
+      '───────────',
+      '🔍 手動查詢（直接輸入）',
+      '───────────',
+      '',
+      '查個股 → 輸入 /TSLA、/2330 或 /台積電',
+      '查觀點 → 輸入 @股癌、@NaNa',
+      '',
+      '───────────',
+      '📖 系統如何運作？',
+      '───────────',
+      '',
+      '1️⃣ 每天自動收聽 KOL podcast，提取看多的股票',
+      '2️⃣ AI 分析產業趨勢，擴展相關概念股',
+      '3️⃣ 持續監控技術面（RSI、均線、跌幅）',
+      '4️⃣ 出現進場訊號時推送通知到群組',
+      '',
+      '入場分數：訊號強度 + KOL 共識度 + 新鮮度',
+      'RSI 熱度：0-30 偏冷（低點機會）｜ 30-60 中性 ｜ 60+ 偏熱（追高風險）',
     ].join('\n'),
   };
 }
@@ -199,27 +209,16 @@ function buildHelpMessage(): Msg {
 // KOL LIST
 // ============================================================
 
-// Featured KOLs that get tappable buttons (others stay as text)
-const FEATURED_KOL_KEYWORDS = new Set(['股癌', '財經皓角', '財女珍妮', '韭菜畢業班', '航海王']);
-
 async function buildKolListReply(): Promise<Msg[]> {
-  const { data: sources } = await supabaseAdmin
-    .from('sources')
-    .select('name, type')
-    .eq('is_active', true)
-    .order('type')
-    .order('name');
+  const { podcasts, youtubes, total } = await fetchKolList();
 
-  if (!sources || sources.length === 0) {
+  if (total === 0) {
     return [{ type: 'text', text: '目前沒有 KOL 資料。' }];
   }
 
-  const podcasts = sources.filter((s: { type: string }) => s.type === 'podcast');
-  const youtubes = sources.filter((s: { type: string }) => s.type === 'youtube');
-
   const body: Msg[] = [];
 
-  const addGroup = (icon: string, label: string, items: Array<{ name: string }>) => {
+  const addGroup = (icon: string, label: string, items: Source[]) => {
     if (items.length === 0) return;
     body.push({
       type: 'text', text: `${icon} ${label}`, size: 'sm', weight: 'bold', color: '#333333',
@@ -228,7 +227,6 @@ async function buildKolListReply(): Promise<Msg[]> {
     for (const item of items) {
       const shortName = extractKolKeyword(item.name);
       if (FEATURED_KOL_KEYWORDS.has(shortName)) {
-        // Tappable button for featured KOLs
         body.push({
           type: 'button',
           style: 'secondary',
@@ -237,10 +235,9 @@ async function buildKolListReply(): Promise<Msg[]> {
           action: { type: 'message', label: `📣 ${shortName}`, text: `/@${shortName}` },
         });
       } else {
-        // Plain text for other KOLs
         body.push({
           type: 'text',
-          text: `• ${item.name}  → 輸入 @${shortName}`,
+          text: `• ${item.name}  ▸ 輸入 @${shortName}`,
           size: 'xs', color: '#555555', wrap: true, margin: 'sm',
         });
       }
@@ -252,7 +249,7 @@ async function buildKolListReply(): Promise<Msg[]> {
 
   return [{
     type: 'flex',
-    altText: `📣 KOL 列表（${sources.length} 位）`,
+    altText: `📣 KOL 列表（${total} 位）`,
     contents: {
       type: 'bubble',
       size: 'mega',
@@ -260,7 +257,7 @@ async function buildKolListReply(): Promise<Msg[]> {
         type: 'box', layout: 'vertical', backgroundColor: '#4A148C', paddingAll: '16px',
         contents: [
           { type: 'text', text: '📣 KOL 列表', size: 'lg', weight: 'bold', color: '#ffffff' },
-          { type: 'text', text: `共 ${sources.length} 位 KOL`, size: 'xs', color: '#ffffffcc' },
+          { type: 'text', text: `共 ${total} 位 KOL`, size: 'xs', color: '#ffffffcc' },
         ],
       },
       body: {
@@ -277,158 +274,20 @@ async function buildKolListReply(): Promise<Msg[]> {
   }];
 }
 
-/**
- * Extract a short, recognizable keyword from a KOL name for the query hint.
- * e.g. "Gooaye 股癌" → "股癌", "NaNa說美股" → "NaNa", "韭菜畢業班" → "韭菜畢業班"
- */
-function extractKolKeyword(name: string): string {
-  // Known mappings for cleaner hints
-  const map: Record<string, string> = {
-    'Gooaye 股癌': '股癌',
-    '美股航海王｜指數流': '航海王',
-    '韭菜畢業班': '韭菜畢業班',
-    '美股投資學-財女珍妮': '財女珍妮',
-    '游庭皓的財經皓角': '財經皓角',
-    'Nick 美股咖啡館': 'Nick',
-    'NaNa說美股': 'NaNa',
-    '陽光財經': '陽光財經',
-  };
-  return map[name] || name;
-}
-
 // ============================================================
 // STOCK LOOKUP
 // ============================================================
 
-/** Format "2026-04-18" → " 4/18", empty string if no date */
-function formatShortDate(dateStr: string): string {
-  if (!dateStr || dateStr === 'unknown') return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  return ` ${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-/** Get ISO date string for 2 months ago */
-function twoMonthsAgoISO(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 2);
-  return d.toISOString();
-}
-
-/** Check if a date string is within the last 2 months */
-function isWithinTwoMonths(dateStr: string): boolean {
-  if (!dateStr || dateStr === 'unknown') return false;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return false;
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - 2);
-  return d >= cutoff;
-}
-
-// Priority KOLs — always show first when multiple KOLs mention same stock
-const PRIORITY_KOLS = ['股癌', '游庭皓'];
-
-function kolPriority(kolName: string): number {
-  for (let i = 0; i < PRIORITY_KOLS.length; i++) {
-    if (kolName.includes(PRIORITY_KOLS[i])) return i;
-  }
-  return PRIORITY_KOLS.length;
-}
-
-// Common aliases for stocks (uppercase keys → ticker_normalized)
-const TICKER_ALIASES: Record<string, string> = {
-  // US stocks — common names
-  'GOOGLE': 'GOOGL', 'ALPHABET': 'GOOGL',
-  'AMAZON': 'AMZN',
-  'TESLA': 'TSLA',
-  'NVIDIA': 'NVDA', '輝達': 'NVDA',
-  'MICROSOFT': 'MSFT', '微軟': 'MSFT',
-  'META': 'META', 'FACEBOOK': 'META', 'FB': 'META',
-  'NETFLIX': 'NFLX',
-  'INTEL': 'INTC',
-  'BOEING': 'BA', '波音': 'BA',
-  'BROADCOM': 'AVGO', '博通': 'AVGO',
-  'MICRON': 'MU', '美光': 'MU',
-  'MARVELL': 'MRVL',
-  // TW stocks — common names
-  'TSMC': '2330.TW', '台積': '2330.TW',
-  '聯發科': '2454.TW', 'MEDIATEK': '2454.TW',
-  '台達電': '2308.TW', '台達': '2308.TW', 'DELTA': '2308.TW',
-  '創意': '3443.TW', '創意電子': '3443.TW',
-  '智原': '3035.TW',
-  '欣興': '3037.TW', '欣興電子': '3037.TW',
-  '奇鋐': '3017.TW',
-  '景碩': '3189.TW',
-  '八方雲集': '2753.TW', '八方': '2753.TW',
-  '聯亞': '3081.TWO',
-  '雙鴻': '3324.TWO',
-  '鴻海': '2317.TW', 'FOXCONN': '2317.TW',
-};
-
-// Normalize common traditional/simplified Chinese character differences
-function normalizeChineseChars(text: string): string {
-  const map: Record<string, string> = { '臺': '台', '積': '積', '體': '體' };
-  return text.replace(/[臺]/g, c => map[c] || c);
-}
-
-function matchesStock(
-  s: { ticker: string; ticker_normalized: string; name: string | null; aliases?: string[] | null },
-  query: string,
-  qUpper: string,
-): boolean {
-  // Exact normalized match
-  if (s.ticker_normalized === qUpper) return true;
-  // TW number shorthand: "2330" → "2330.TW" or "3324" → "3324.TWO"
-  if (s.ticker_normalized === `${qUpper}.TW` || s.ticker_normalized === `${qUpper}.TWO`) return true;
-  // Exact ticker match
-  if (s.ticker === query) return true;
-  // Name contains query (case-insensitive, with Chinese normalization)
-  if (s.name) {
-    const normName = normalizeChineseChars(s.name).toLowerCase();
-    const normQuery = normalizeChineseChars(query).toLowerCase();
-    if (normName.includes(normQuery)) return true;
-  }
-  // Ticker contains query (e.g. query "台積電" matches ticker "台積電 (2330)")
-  if (normalizeChineseChars(s.ticker).toLowerCase().includes(normalizeChineseChars(query).toLowerCase())) return true;
-  // DB aliases match (AI-generated, e.g. ["Google", "谷歌", "Alphabet"])
-  if (s.aliases?.length) {
-    const qLower = query.toLowerCase();
-    if (s.aliases.some(a => a.toLowerCase() === qLower)) return true;
-  }
-  // Hardcoded alias fallback (e.g. "TSMC" → "2330.TW")
-  const aliasTarget = TICKER_ALIASES[qUpper];
-  if (aliasTarget && s.ticker_normalized === aliasTarget) return true;
-  return false;
-}
-
 async function buildStockReply(query: string): Promise<Msg[] | null> {
-  const q = query.toUpperCase().trim();
-
-  // Try watchlist first
-  const { data: stocks } = await supabaseAdmin
-    .from('watchlist_stocks')
-    .select('*')
-    .eq('status', 'active');
-
-  const stock = (stocks || []).find((s: { ticker: string; ticker_normalized: string; name: string | null; aliases?: string[] | null }) =>
-    matchesStock(s, query, q)
-  );
-
-  if (stock) {
-    return buildWatchlistStockBubble(stock);
-  }
-
-  // Fallback: search analyses for KOL mentions
-  const kolOpinions = await searchAnalysesForStock(query);
-  if (kolOpinions.length > 0) {
-    return buildAnalysesStockBubble(query, kolOpinions);
-  }
-
-  // Not found at all — return null so we don't reply to random messages
-  return null;
+  const detail = await fetchStockDetail(query);
+  if (!detail) return null;
+  return detail.type === 'watchlist'
+    ? buildWatchlistStockBubble(detail)
+    : buildAnalysesStockBubble(detail);
 }
 
-async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
+function buildWatchlistStockBubble(detail: StockDetailWatchlist): Msg[] {
+  const { stock, snapshot, recentAlertTypes, kolOpinions } = detail;
   const market = stock.market;
   const marketLabel = market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股';
   const headerColor = market === 'TW' ? '#1B5E20' : '#0D47A1';
@@ -445,14 +304,10 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
     });
   }
 
-  // === Section 2: Technical indicators (computed from stored prices) ===
-  const storedPrices = await getStoredPrices(stock.ticker_normalized, 250);
-  const snapshot: TechnicalSnapshot | null = storedPrices.length >= 14 ? computeTechnicalSnapshot(storedPrices) : null;
-
+  // === Section 2: Technical indicators ===
   if (snapshot) {
     body.push({ type: 'separator', margin: 'lg' });
 
-    // RSI heat bar
     const rsi = snapshot.rsi14;
     if (rsi !== null) {
       const rsiColor = rsi < 30 ? '#2196F3' : rsi < 40 ? '#64B5F6' : rsi < 60 ? '#9E9E9E' : rsi < 70 ? '#FF9800' : '#F44336';
@@ -471,83 +326,52 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       });
     }
 
-    // SMA reference prices
     const price = stock.current_price || snapshot.currentPrice;
     const smaRows: Msg[] = [];
-    if (snapshot.sma50) {
-      const diff = price > 0 ? ((price - snapshot.sma50) / snapshot.sma50 * 100) : 0;
+    const addSmaRow = (label: string, sma: number, margin?: string) => {
+      const diff = price > 0 ? ((price - sma) / sma * 100) : 0;
       const color = diff >= 0 ? '#1B5E20' : '#B71C1C';
       smaRows.push({
-        type: 'box', layout: 'horizontal', contents: [
-          { type: 'text', text: '50日均線', size: 'xs', color: '#999999', flex: 3 },
-          { type: 'text', text: `${currency}${snapshot.sma50.toFixed(2)} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)`, size: 'xs', color, flex: 4, align: 'end' },
+        type: 'box', layout: 'horizontal', ...(margin ? { margin } : {}), contents: [
+          { type: 'text', text: label, size: 'xs', color: '#999999', flex: 3 },
+          { type: 'text', text: `${currency}${sma.toFixed(2)} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)`, size: 'xs', color, flex: 4, align: 'end' },
         ],
       });
-    }
-    if (snapshot.sma200) {
-      const diff = price > 0 ? ((price - snapshot.sma200) / snapshot.sma200 * 100) : 0;
-      const color = diff >= 0 ? '#1B5E20' : '#B71C1C';
-      smaRows.push({
-        type: 'box', layout: 'horizontal', margin: 'xs', contents: [
-          { type: 'text', text: '200日均線', size: 'xs', color: '#999999', flex: 3 },
-          { type: 'text', text: `${currency}${snapshot.sma200.toFixed(2)} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)`, size: 'xs', color, flex: 4, align: 'end' },
-        ],
-      });
-    }
+    };
+    if (snapshot.sma50) addSmaRow('50日均線', snapshot.sma50);
+    if (snapshot.sma200) addSmaRow('200日均線', snapshot.sma200, 'xs');
     if (smaRows.length > 0) {
       body.push({ type: 'box', layout: 'vertical', margin: 'md', contents: smaRows });
     }
   }
 
-  // Recent alert signals
-  const { data: alerts } = await supabaseAdmin
-    .from('stock_alerts')
-    .select('alert_type')
-    .or(`ticker.eq.${stock.ticker},ticker.eq.${stock.ticker_normalized}`)
-    .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  if (alerts && alerts.length > 0) {
-    const uniqueAlertTypes = [...new Set(alerts.map((a: Msg) => a.alert_type as string))];
-    for (const alertType of uniqueAlertTypes) {
-      const cfg = ALERT_TYPE_CONFIG[alertType];
-      if (!cfg) continue;
-      body.push({
-        type: 'text', text: `⚡ ${cfg.label}：${cfg.detail}`,
-        size: 'xs', color: '#E65100', wrap: true, margin: 'sm',
-      });
-    }
+  // Recent alert signals — suppress weaker drop tiers when a stronger one fired
+  const filteredAlertTypes = recentAlertTypes.filter(t => {
+    if (t === 'significant_drop_5pct' && recentAlertTypes.includes('significant_drop_10pct')) return false;
+    if (t === 'significant_drop_5pct' && recentAlertTypes.includes('significant_drop_20pct')) return false;
+    if (t === 'significant_drop_10pct' && recentAlertTypes.includes('significant_drop_20pct')) return false;
+    return true;
+  });
+  for (const alertType of filteredAlertTypes) {
+    const cfg = ALERT_TYPE_CONFIG[alertType];
+    if (!cfg) continue;
+    body.push({
+      type: 'text', text: `⚡ ${cfg.label}：${cfg.detail}`,
+      size: 'xs', color: '#E65100', wrap: true, margin: 'sm',
+    });
   }
 
   // === Section 3: KOL opinions ===
-  const kolSources = ((stock.kol_sources || []) as Array<{ kol: string; reason: string; sentiment?: string; date?: string }>)
-    .filter(k => isWithinTwoMonths(k.date || ''))
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-  // Deduplicate by KOL name — newest first so first match = latest opinion
-  const kolMap = new Map<string, { kol: string; reason: string; sentiment: string; date: string }>();
-  for (const k of kolSources) {
-    if (!kolMap.has(k.kol)) {
-      kolMap.set(k.kol, { kol: k.kol, reason: k.reason, sentiment: k.sentiment || 'bullish', date: k.date || '' });
-    }
-  }
-
-  const uniqueKols = Array.from(kolMap.values())
-    .sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol))
-    .slice(0, 5);
-
-  if (uniqueKols.length > 0) {
+  if (kolOpinions.length > 0) {
     body.push({ type: 'separator', margin: 'lg' });
     body.push({ type: 'text', text: 'KOL 觀點', size: 'sm', weight: 'bold', color: '#333333', margin: 'md' });
 
-    for (const k of uniqueKols) {
+    for (const k of kolOpinions) {
       const icon = SENTIMENT_ICON[k.sentiment] || '📣';
       const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
       const sentColor = k.sentiment === 'bullish' ? '#1B5E20' : k.sentiment === 'bearish' ? '#B71C1C' : '#F57F17';
       const dateStr = formatShortDate(k.date);
 
-      // KOL name + sentiment tag as header
       body.push({
         type: 'box', layout: 'horizontal', margin: 'lg', contents: [
           { type: 'text', text: `${icon} ${k.kol}`, size: 'xs', weight: 'bold', color: '#333333', flex: 4 },
@@ -560,14 +384,12 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
           },
         ],
       });
-      // Reason as body text
       body.push({
         type: 'text', text: k.reason, size: 'xs', color: '#666666', wrap: true, margin: 'xs',
       });
     }
   }
 
-  // Consensus
   if (stock.consensus) {
     body.push({ type: 'separator', margin: 'lg' });
     body.push({
@@ -595,81 +417,22 @@ async function buildWatchlistStockBubble(stock: Msg): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: `${uniqueKols.length} 位 KOL 近期觀點 ｜ /說明 了解更多`, size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
+          { type: 'text', text: `${kolOpinions.length} 位 KOL 近期觀點 ｜ /說明 了解更多`, size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true },
         ],
       },
     },
   }];
 }
 
-interface KolOpinion {
-  kol: string;
-  sentiment: string;
-  reason: string;
-  date: string;
-}
-
-async function searchAnalysesForStock(query: string): Promise<KolOpinion[]> {
-  const q = query.toUpperCase().trim();
-  const normQuery = normalizeChineseChars(query).toLowerCase();
-  const { data: analyses } = await supabaseAdmin
-    .from('analyses')
-    .select('full_analysis, created_at')
-    .gte('created_at', twoMonthsAgoISO())
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  if (!analyses) return [];
-
-  const opinions: KolOpinion[] = [];
-  const seen = new Set<string>();
-
-  for (const a of analyses) {
-    const fa = a.full_analysis as { podcastName?: string; signals?: Array<{ ticker: string; type: string; reason: string }> } | null;
-    if (!fa?.signals || !fa.podcastName) continue;
-
-    const date = a.created_at ? a.created_at.split('T')[0] : '';
-
-    for (const sig of fa.signals) {
-      if (!sig.ticker) continue;
-      const ticker = sig.ticker.toUpperCase();
-      const normTicker = normalizeChineseChars(sig.ticker).toLowerCase();
-      // Match: exact ticker, contains TW number, contains query, or alias
-      const twNum = q.replace(/\.TWO?$/, '');
-      const aliasTarget = TICKER_ALIASES[q];
-      if (
-        ticker !== q &&
-        !ticker.includes(q) &&
-        !ticker.includes(twNum) &&
-        !normTicker.includes(normQuery) &&
-        !(aliasTarget && ticker.includes(aliasTarget.replace(/\.TWO?$/, '')))
-      ) continue;
-
-      const key = `${fa.podcastName}|${sig.type}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      opinions.push({
-        kol: fa.podcastName,
-        sentiment: sig.type,
-        reason: sig.reason || '',
-        date,
-      });
-    }
-  }
-
-  return opinions.slice(0, 8);
-}
-
-async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): Promise<Msg[]> {
+function buildAnalysesStockBubble(detail: StockDetailAnalyses): Msg[] {
+  const { query, opinions } = detail;
   const body: Msg[] = [
     { type: 'text', text: '⚠️ 此股票未加入追蹤（無技術指標）', size: 'xs', color: '#FF6F00', wrap: true },
     { type: 'separator', margin: 'lg' },
     { type: 'text', text: 'KOL 觀點', size: 'xs', weight: 'bold', color: '#999999', margin: 'md' },
   ];
 
-  const sortedOpinions = [...opinions].sort((a, b) => kolPriority(a.kol) - kolPriority(b.kol));
-  for (const k of sortedOpinions.slice(0, 5)) {
+  for (const k of opinions.slice(0, 5)) {
     const icon = SENTIMENT_ICON[k.sentiment] || '📣';
     const sentLabel = k.sentiment === 'bullish' ? '看多' : k.sentiment === 'bearish' ? '看空' : '觀望';
     const dateStr = formatShortDate(k.date);
@@ -712,84 +475,12 @@ async function buildAnalysesStockBubble(query: string, opinions: KolOpinion[]): 
 // ============================================================
 
 async function buildOpportunityReply(): Promise<Msg[]> {
-  // Get recent alerts (last 7 days) — stocks already flagged as good entry points
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const { opportunities, totalStocksScanned } = await fetchOpportunities();
 
-  const { data: alerts } = await supabaseAdmin
-    .from('stock_alerts')
-    .select('ticker, market, alert_type, trigger_reason, trigger_price, technical_snapshot, kol_context, watchlist_stock_id, created_at')
-    .gte('created_at', sevenDaysAgo.toISOString())
-    .in('status', ['pending', 'sent'])
-    .order('created_at', { ascending: false });
-
-  if (!alerts || alerts.length === 0) {
+  if (opportunities.length === 0) {
     return [{ type: 'text', text: '🎯 近 7 日沒有偵測到進場機會。\n\n系統每日掃描追蹤股票的技術訊號（回檔、RSI超賣、均線支撐等），有機會時會自動通知。' }];
   }
 
-  // Get watchlist stocks for KOL context enrichment
-  const stockIds = [...new Set(alerts.map(a => a.watchlist_stock_id))];
-  const { data: stocks } = await supabaseAdmin
-    .from('watchlist_stocks')
-    .select('id, ticker, market, kol_sources, consensus')
-    .in('id', stockIds);
-
-  const stockMap = new Map((stocks || []).map(s => [s.id, s]));
-
-  // Deduplicate by ticker, aggregate alert types, pick best info
-  interface OpportunityItem {
-    ticker: string;
-    market: string;
-    alertTypes: Set<string>;
-    triggerReason: string;
-    triggerPrice: number;
-    rsi: number | null;
-    dropPct: number | null;
-    kolName: string;
-    kolDate: string;
-    score: number;
-  }
-
-  const tickerMap = new Map<string, OpportunityItem>();
-
-  for (const alert of alerts) {
-    const existing = tickerMap.get(alert.ticker);
-    const snapshot = alert.technical_snapshot as { rsi14?: number; dropFrom20dHigh?: number } | null;
-    const kolCtx = (alert.kol_context as Array<{ kol: string; date: string }>) || [];
-    const stock = stockMap.get(alert.watchlist_stock_id);
-    const kolSources = (stock?.kol_sources as Array<{ kol: string; date: string; confidence: string }>) || [];
-
-    const alertScore = ALERT_TYPE_CONFIG[alert.alert_type]?.score || 5;
-    const kolName = kolCtx[0]?.kol || kolSources[0]?.kol || '';
-    const kolDate = kolCtx[0]?.date || kolSources[0]?.date || '';
-
-    if (existing) {
-      existing.alertTypes.add(alert.alert_type);
-      existing.score += alertScore;
-    } else {
-      tickerMap.set(alert.ticker, {
-        ticker: alert.ticker,
-        market: alert.market,
-        alertTypes: new Set([alert.alert_type]),
-        triggerReason: alert.trigger_reason,
-        triggerPrice: alert.trigger_price,
-        rsi: snapshot?.rsi14 ?? null,
-        dropPct: snapshot?.dropFrom20dHigh ?? null,
-        kolName,
-        kolDate: kolDate ? formatShortDate(kolDate) : '',
-        score: alertScore,
-      });
-    }
-  }
-
-  // Sort by score descending
-  const opportunities = [...tickerMap.values()].sort((a, b) => b.score - a.score).slice(0, 8);
-
-  if (opportunities.length === 0) {
-    return [{ type: 'text', text: '🎯 近 7 日沒有偵測到進場機會。\n\n輸入 /清單 查看所有追蹤股票。' }];
-  }
-
-  // Build flex bubble
   const body: Msg[] = [];
 
   for (const opp of opportunities) {
@@ -803,14 +494,12 @@ async function buildOpportunityReply(): Promise<Msg[]> {
       margin: body.length > 0 ? 'md' : 'none',
     });
 
-    // Technical summary line
     const details: string[] = [];
     if (opp.triggerPrice) details.push(`$${opp.triggerPrice.toFixed(2)}`);
     if (opp.rsi !== null) details.push(`RSI ${opp.rsi.toFixed(0)}`);
     if (opp.dropPct !== null && opp.dropPct < -3) details.push(`${opp.dropPct.toFixed(0)}%`);
 
-    // Alert type labels
-    const labels = [...opp.alertTypes]
+    const labels = opp.alertTypes
       .map(t => ALERT_TYPE_CONFIG[t]?.label)
       .filter(Boolean)
       .slice(0, 3);
@@ -821,8 +510,6 @@ async function buildOpportunityReply(): Promise<Msg[]> {
       size: 'xxs', color: '#888888', wrap: true, margin: 'none',
     });
   }
-
-  const totalStocks = stockIds.length;
 
   return [{
     type: 'flex',
@@ -844,7 +531,7 @@ async function buildOpportunityReply(): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: `近 7 日訊號 | 共掃描 ${totalStocks} 檔追蹤股`, size: 'xxs', color: '#AAAAAA', align: 'center' },
+          { type: 'text', text: `近 7 日訊號 | 共掃描 ${totalStocksScanned} 檔追蹤股`, size: 'xxs', color: '#AAAAAA', align: 'center' },
         ],
       },
     },
@@ -856,80 +543,27 @@ async function buildOpportunityReply(): Promise<Msg[]> {
 // ============================================================
 
 async function buildKolReply(kolName: string): Promise<Msg[]> {
-  const { data: analyses } = await supabaseAdmin
-    .from('analyses')
-    .select('full_analysis, created_at')
-    .gte('created_at', twoMonthsAgoISO())
-    .order('created_at', { ascending: false })
-    .limit(200);
-
-  if (!analyses) {
-    return [{ type: 'text', text: `找不到 ${kolName} 的觀點資料。` }];
-  }
-
-  interface StockOpinion {
-    ticker: string; sentiment: string; reason: string; date: string;
-    action?: string; confidence?: string; timeHorizon?: string; priceLevel?: string;
-  }
-  const bullish: StockOpinion[] = [];
-  const bearish: StockOpinion[] = [];
-  const monitor: StockOpinion[] = [];
-  const seenTickers = new Set<string>();
-  const allDates: string[] = [];
-
-  // Find the actual KOL name from the data (do this first for header)
-  let actualKolName = kolName;
-
-  for (const a of analyses) {
-    const fa = a.full_analysis as {
-      podcastName?: string;
-      signals?: Array<{
-        ticker: string; type: string; reason: string;
-        action?: string; confidence?: string; timeHorizon?: string; priceLevel?: string;
-      }>;
-    } | null;
-    if (!fa?.signals || !fa.podcastName) continue;
-    if (!fa.podcastName.toLowerCase().includes(kolName.toLowerCase())) continue;
-
-    if (actualKolName === kolName) actualKolName = fa.podcastName;
-
-    const date = a.created_at ? new Date(a.created_at).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }) : '';
-    if (date) allDates.push(date);
-
-    for (const sig of fa.signals) {
-      if (!sig.ticker || seenTickers.has(`${sig.ticker}|${sig.type}`)) continue;
-      seenTickers.add(`${sig.ticker}|${sig.type}`);
-
-      const item: StockOpinion = {
-        ticker: sig.ticker, sentiment: sig.type, reason: sig.reason || '', date,
-        action: sig.action, confidence: sig.confidence,
-        timeHorizon: sig.timeHorizon, priceLevel: sig.priceLevel,
-      };
-      if (sig.type === 'bullish') bullish.push(item);
-      else if (sig.type === 'bearish') bearish.push(item);
-      else monitor.push(item);
-    }
-  }
+  const { actualKolName, bullish, bearish, monitor, dateRange } = await fetchKolOpinions(kolName);
 
   if (bullish.length === 0 && bearish.length === 0 && monitor.length === 0) {
     return [{ type: 'text', text: `找不到「${kolName}」的觀點資料。\n\n提示：輸入 /kol 查看所有 KOL 列表` }];
   }
 
   const body: Msg[] = [];
-
   const confidenceMap: Record<string, string> = { high: '高', medium: '中', low: '低' };
   const timeHorizonMap: Record<string, string> = { short: '短線', medium: '中線', long: '長線' };
 
   const addSection = (title: string, items: StockOpinion[], color: string) => {
     if (items.length === 0) return;
     body.push({
-      type: 'text', text: `${title}（${items.length} 檔）`, size: 'sm', weight: 'bold', color, margin: body.length > 0 ? 'lg' : 'none',
+      type: 'text', text: `${title}（${items.length} 檔）`, size: 'sm', weight: 'bold', color,
+      margin: body.length > 0 ? 'lg' : 'none',
     });
     for (const item of items.slice(0, 8)) {
       body.push({
-        type: 'text', text: `• ${item.ticker}（${item.date}）：${item.reason}`, size: 'xs', color: '#555555', wrap: true, margin: 'xs',
+        type: 'text', text: `• ${item.ticker}（${item.date}）：${item.reason}`,
+        size: 'xs', color: '#555555', wrap: true, margin: 'xs',
       });
-      // Detail line: action, confidence, timeHorizon, priceLevel
       const details: string[] = [];
       if (item.action) details.push(item.action);
       if (item.confidence) details.push(`信心${confidenceMap[item.confidence] || item.confidence}`);
@@ -949,11 +583,6 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
   addSection('📈 看多', bullish, '#1B5E20');
   addSection('👀 觀望', monitor, '#F57F17');
   addSection('📉 看空', bearish, '#B71C1C');
-
-  // Date range for footer
-  const dateRange = allDates.length > 0
-    ? `${allDates[allDates.length - 1]} ~ ${allDates[0]}`
-    : '近 2 個月';
 
   return [{
     type: 'flex',
@@ -975,7 +604,7 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
         contents: [
-          { type: 'text', text: `資料來源：podcast 分析（${dateRange}）`, size: 'xxs', color: '#AAAAAA', align: 'center' },
+          { type: 'text', text: `資料來源：podcast 分析（${dateRange || '近 2 個月'}）`, size: 'xxs', color: '#AAAAAA', align: 'center' },
         ],
       },
     },
@@ -983,78 +612,17 @@ async function buildKolReply(kolName: string): Promise<Msg[]> {
 }
 
 // ============================================================
-// WATCHLIST (SIMPLIFIED)
+// WATCHLIST
 // ============================================================
 
 async function buildWatchlistReply(): Promise<Msg[]> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const { scoredStocks, allStocks, usStocks, twStocks } = await fetchWatchlist();
 
-  const [stocksRes, alertsRes] = await Promise.all([
-    supabaseAdmin
-      .from('watchlist_stocks')
-      .select('ticker, ticker_normalized, market, name, added_by, sector_theme, consensus, mention_count, status')
-      .eq('status', 'active')
-      .order('market')
-      .order('ticker'),
-    supabaseAdmin
-      .from('stock_alerts')
-      .select('ticker, alert_type, technical_snapshot, created_at')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .order('created_at', { ascending: false }),
-  ]);
-
-  const stocks = stocksRes.data || [];
-  const alerts = alertsRes.data || [];
-
-  if (stocks.length === 0) {
+  if (allStocks.length === 0) {
     return [{ type: 'text', text: '目前沒有追蹤中的股票。' }];
   }
 
-  // Build scored opportunities
-  const tickerAlerts = new Map<string, typeof alerts>();
-  for (const alert of alerts) {
-    if (!tickerAlerts.has(alert.ticker)) tickerAlerts.set(alert.ticker, []);
-    tickerAlerts.get(alert.ticker)!.push(alert);
-  }
-
-  interface ScoredStock {
-    ticker: string; market: string; score: number;
-    alertLabels: string[]; rsi: number | null; consensus: string | null;
-  }
-
-  const scoredStocks: ScoredStock[] = [];
-  for (const stock of stocks) {
-    const sa = tickerAlerts.get(stock.ticker) || tickerAlerts.get(stock.ticker_normalized) || [];
-    if (sa.length === 0) continue;
-
-    let score = 0;
-    const labels = new Set<string>();
-    for (const a of sa) {
-      const cfg = ALERT_TYPE_CONFIG[a.alert_type];
-      if (cfg) {
-        const age = (Date.now() - new Date(a.created_at).getTime()) / 86400000;
-        score += cfg.score * (0.5 + 0.5 * Math.max(0, 1 - age / 7));
-        labels.add(cfg.label);
-      }
-    }
-    if (stock.consensus === '多方共識') score += 20;
-    else if (stock.consensus === '單一來源') score += 5;
-    score += Math.min((stock.mention_count || 1) * 3, 15);
-
-    const snap = sa[0]?.technical_snapshot as { rsi14?: number } | null;
-    scoredStocks.push({
-      ticker: stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker,
-      market: stock.market, score,
-      alertLabels: Array.from(labels),
-      rsi: snap?.rsi14 ?? null,
-      consensus: stock.consensus,
-    });
-  }
-
-  scoredStocks.sort((a, b) => b.score - a.score);
   const topPicks = scoredStocks.slice(0, 5);
-
   const messages: Msg[] = [];
 
   // Bubble 1: Entry opportunities
@@ -1103,41 +671,34 @@ async function buildWatchlistReply(): Promise<Msg[]> {
   });
 
   // Bubble 2: Full stock list + usage hints
-  const usStocks = stocks.filter((s: { market: string }) => s.market === 'US');
-  const twStocks = stocks.filter((s: { market: string }) => s.market === 'TW');
-
-  // Format stock display: use ticker for US, name(ticker) for TW
-  const formatTicker = (s: { ticker: string; name: string | null; market: string }) => {
+  const formatTicker = (s: WatchlistStockRow) => {
     if (s.market === 'TW' && s.name) return `${s.name}(${s.ticker})`;
     return s.ticker;
   };
-  const usTickerList = usStocks.map(formatTicker).join('・');
-  const twTickerList = twStocks.map(formatTicker).join('・');
 
   const listBody: Msg[] = [];
   if (usStocks.length > 0) {
     listBody.push({ type: 'text', text: `🇺🇸 美股（${usStocks.length} 檔）`, size: 'sm', weight: 'bold', color: '#0D47A1' });
-    listBody.push({ type: 'text', text: usTickerList, size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
+    listBody.push({ type: 'text', text: usStocks.map(formatTicker).join('・'), size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
   }
   if (twStocks.length > 0) {
     listBody.push({ type: 'text', text: `🇹🇼 台股（${twStocks.length} 檔）`, size: 'sm', weight: 'bold', color: '#1B5E20', margin: usStocks.length > 0 ? 'lg' : 'none' });
-    listBody.push({ type: 'text', text: twTickerList, size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
+    listBody.push({ type: 'text', text: twStocks.map(formatTicker).join('・'), size: 'xs', color: '#555555', wrap: true, margin: 'sm' });
   }
   listBody.push({ type: 'separator', margin: 'lg' });
   listBody.push({ type: 'text', text: '💡 輸入 /代號 查詳情（如 /TSLA）', size: 'xs', color: '#999999', margin: 'md' });
   listBody.push({ type: 'text', text: '💡 輸入 @名稱 查觀點（如 @股癌）', size: 'xs', color: '#999999', margin: 'xs' });
-  listBody.push({ type: 'text', text: '💡 輸入 /說明 查看所有指令', size: 'xs', color: '#999999', margin: 'xs' });
 
   messages.push({
     type: 'flex',
-    altText: `📋 追蹤清單（${stocks.length} 檔）`,
+    altText: `📋 追蹤清單（${allStocks.length} 檔）`,
     contents: {
       type: 'bubble', size: 'mega',
       header: {
         type: 'box', layout: 'vertical', backgroundColor: '#37474F', paddingAll: '16px',
         contents: [
           { type: 'text', text: '📋 監控總覽', size: 'lg', weight: 'bold', color: '#ffffff' },
-          { type: 'text', text: `共 ${stocks.length} 檔監控中`, size: 'xs', color: '#ffffffcc' },
+          { type: 'text', text: `共 ${allStocks.length} 檔監控中`, size: 'xs', color: '#ffffffcc' },
         ],
       },
       body: {
@@ -1148,8 +709,4 @@ async function buildWatchlistReply(): Promise<Msg[]> {
   });
 
   return messages;
-}
-
-export async function GET() {
-  return NextResponse.json({ status: 'ok' });
 }

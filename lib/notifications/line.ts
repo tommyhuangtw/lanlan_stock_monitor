@@ -18,6 +18,11 @@ export interface NewWatchlistStock {
   sectorTheme?: string;
 }
 
+export interface CleanupEntry {
+  ticker: string;
+  reason: string;
+}
+
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/push';
 
 function formatShortDate(dateStr?: string): string {
@@ -29,6 +34,27 @@ function formatShortDate(dateStr?: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type FlexComponent = Record<string, any>;
+
+/** Resolve the push target: group takes precedence over 1:1 user. */
+function lineTarget(): string | null {
+  if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) return null;
+  return process.env.LINE_GROUP_ID || process.env.LINE_USER_ID || null;
+}
+
+/**
+ * Send a plain-text LINE push message.
+ * LINE text messages have no markup, so any HTML tags are stripped.
+ * ponytail: plain text is fine for brief/cleanup; build Flex bubbles only if these need styling.
+ */
+export async function sendLineText(text: string): Promise<boolean> {
+  const target = lineTarget();
+  if (!target) {
+    log('warn', '[LINE] credentials not configured, skipping text push');
+    return false;
+  }
+  const plain = text.replace(/<[^>]+>/g, '');
+  return sendLinePushMessage(target, [{ type: 'text', text: plain.slice(0, 4900) }]);
+}
 
 /**
  * Send a LINE push message to a user or group.
@@ -423,4 +449,25 @@ export async function sendNewStockAlerts(stocks: NewWatchlistStock[]): Promise<n
   }
 
   return sentCount;
+}
+
+/**
+ * Send a LINE notification listing archived (cleaned-up) watchlist stocks.
+ */
+export async function sendCleanupNotification(
+  entries: CleanupEntry[],
+  usCurrent: number,
+  twCurrent: number,
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const lines = [
+    `🗑 監控池清理（${entries.length} 檔已移除）`,
+    '',
+    ...entries.map(e => `• ${e.ticker} — ${e.reason}`),
+    '',
+    `目前監控：🇺🇸 ${usCurrent} 檔  🇹🇼 ${twCurrent} 檔`,
+  ];
+
+  await sendLineText(lines.join('\n'));
 }

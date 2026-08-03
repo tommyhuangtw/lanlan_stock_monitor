@@ -24,7 +24,18 @@ export const ALERT_TYPE_CONFIG: Record<string, { label: string; detail: string; 
   consolidation: { label: '盤整待突破', detail: '價格區間收窄，留意突破方向', score: 10 },
   ai_entry_signal: { label: 'AI 訊號', detail: 'AI 偵測到入場機會', score: 15 },
   volume_surge: { label: '量能異常', detail: '成交量異常放大（≥2倍均量）', score: 10 },
+  // Emitted by entry-point-detector but previously missing here, so both fell
+  // through to a default score of 5 and rendered as raw English in the cards.
+  breakout_new_high: { label: '突破新高', detail: '突破近 20 日高點，趨勢轉強', score: 15 },
+  significant_surge_5pct: { label: '短線急漲', detail: '短線急漲逾 5%，留意追高風險', score: 5 },
 };
+
+/**
+ * Mega caps that always head the opportunity list, regardless of signal
+ * strength. A deliberate hard tier rather than a score bonus — any bonus big
+ * enough to guarantee the top spots would also flatten the ordering below it.
+ */
+export const MAG7 = new Set(['AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'TSLA']);
 
 export const SENTIMENT_ICON: Record<string, string> = {
   bullish: '📈',
@@ -323,7 +334,12 @@ export async function fetchOpportunities(): Promise<{
   }
 
   const opportunities: OpportunityItem[] = [...tickerMap.values()]
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      const aMag = MAG7.has(a.ticker.toUpperCase()) ? 1 : 0;
+      const bMag = MAG7.has(b.ticker.toUpperCase()) ? 1 : 0;
+      if (aMag !== bMag) return bMag - aMag;
+      return b.score - a.score;
+    })
     .slice(0, 8)
     .map(o => ({
       ...o,

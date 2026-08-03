@@ -35,7 +35,14 @@ interface KolPriceLevel {
   date: string;
 }
 
-export async function populateWatchlist(): Promise<PopulateWatchlistResult> {
+/**
+ * @param opts.fromAnalyses Skip the digest and read the analyses table directly.
+ *   Backfills need this: a stale digest for today already exists and reports no
+ *   signals, which would otherwise suppress the fallback and silently do nothing.
+ */
+export async function populateWatchlist(
+  opts: { fromAnalyses?: boolean } = {},
+): Promise<PopulateWatchlistResult> {
   const results: PopulateWatchlistResult = {
     newStocks: 0,
     updatedStocks: 0,
@@ -46,6 +53,11 @@ export async function populateWatchlist(): Promise<PopulateWatchlistResult> {
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
+
+  if (opts.fromAnalyses) {
+    log('info', '[populateWatchlist] Reading analyses directly (digest bypassed)');
+    return await populateFromAnalyses(results, todayStr);
+  }
 
   // Get today's digest consolidated report
   const { data: digest, error: digestError } = await supabaseAdmin

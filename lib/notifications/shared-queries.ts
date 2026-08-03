@@ -181,15 +181,16 @@ export interface StockOpinion {
 
 /**
  * Bonus added to a stock's signal score so recognisable companies surface
- * first. Sized against ALERT_TYPE_CONFIG (10–30 per signal) — enough to lift a
- * mega cap above an obscure name with one more signal, not enough to bury a
- * genuinely strong setup on a small cap.
+ * first. Sized against ALERT_TYPE_CONFIG (10–30 per signal): a mega cap clears
+ * roughly two extra signals on an obscure name, which is what it takes to put
+ * META above a small cap that happens to have fired a lot. A genuinely strong
+ * small-cap setup still places — it just doesn't lead.
  */
 export function familiarityBonus(marketCapUsd: number | null | undefined): number {
   if (!marketCapUsd) return 0;
-  if (marketCapUsd >= 200e9) return 30; // mega: NVDA, META, MSFT
-  if (marketCapUsd >= 50e9) return 20;  // large: MU, AMD, 台積電
-  if (marketCapUsd >= 10e9) return 10;  // mid
+  if (marketCapUsd >= 200e9) return 60; // mega: NVDA, META, MSFT
+  if (marketCapUsd >= 50e9) return 35;  // large: MU, AMD, 台積電
+  if (marketCapUsd >= 10e9) return 15;  // mid
   return 0;
 }
 

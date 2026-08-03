@@ -982,7 +982,7 @@ const TECH_SYSTEM_PROMPT = `你是股票分類器。判斷每一檔是否屬於�
 - 軟體、雲端、SaaS、資安、AI
 - 消費性電子、硬體、網通、伺服器
 - 網路平台、電商、社群、串流科技公司
-- 科技類 ETF（如 QQQ、SMH、SOXX）
+- 科技類 ETF（如 QQQ、SMH、SOXX）、AI 或半導體主題 ETF
 
 不算科技股：
 - 銀行、保險、券商、金控
@@ -991,6 +991,7 @@ const TECH_SYSTEM_PROMPT = `你是股票分類器。判斷每一檔是否屬於�
 - 食品、零售通路、餐飲、汽車、航空、工業機械
 - 大盤或債券 ETF（如 VOO、TLT、IWM）
 
+每筆都附了 Yahoo 的業務描述，請以業務描述為主要依據 —— ETF 沒有 GICS 產業別，只能靠描述判斷。
 判斷依據以「公司實際主要業務」為準，不要只看 GICS 產業別 —— GICS 會把 Google 和 Meta 放在 Communication Services，但它們是科技股；也會把 Comcast 放在同一類，但它不是。
 
 每一檔輸入都有一個 id，請用 id 回覆，不要改寫或省略任何一筆。
@@ -1001,6 +1002,8 @@ export interface TechVerdict {
   ticker: string;
   tech: boolean;
   reason: string;
+  /** False when the model never judged this ticker. Do not cache these. */
+  ok: boolean;
 }
 
 /**
@@ -1018,13 +1021,14 @@ export interface TechVerdict {
  * worse than carrying an extra one.
  */
 export async function classifyTechStocks(
-  stocks: Array<{ ticker: string; name?: string | null; sector?: string | null; industry?: string | null }>,
+  stocks: Array<{ ticker: string; name?: string | null; sector?: string | null; industry?: string | null; summary?: string | null }>,
 ): Promise<TechVerdict[]> {
   if (stocks.length === 0) return [];
 
   const keepAll = (reason: string): TechVerdict[] =>
-    stocks.map(s => ({ ticker: s.ticker, tech: true, reason }));
+    stocks.map(s => ({ ticker: s.ticker, tech: true, reason, ok: false }));
 
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
   try {
     const response = await openrouter.chat.completions.create({
       model: LITE_MODEL,
@@ -1038,8 +1042,9 @@ export async function classifyTechStocks(
           // Match on a numeric id, not the ticker: TW tickers like "台積電 (2330)"
           // come back reformatted and would never match by string.
           content: stocks.map((s, i) =>
-            `id:${i + 1}｜${s.ticker}｜${s.name || ''}｜GICS: ${s.sector || '無'} / ${s.industry || '無'}`
-          ).join('\n'),
+            `id:${i + 1}｜${s.ticker}｜${s.name || ''}｜GICS: ${s.sector || '無'} / ${s.industry || '無'}\n` +
+            `業務：${s.summary || '（無描述）'}`
+          ).join('\n\n'),
         },
       ],
     });
@@ -1048,18 +1053,22 @@ export async function classifyTechStocks(
       results?: Array<{ id: number; tech: boolean; reason: string }>;
     };
     if (!Array.isArray(parsed.results) || parsed.results.length === 0) {
-      return keepAll('分類器無回應，保留');
+      throw new Error('Classifier returned no results');
     }
 
     const byId = new Map(parsed.results.map(v => [Number(v.id), v]));
     return stocks.map((s, i) => {
       const v = byId.get(i + 1);
       return v
-        ? { ticker: s.ticker, tech: !!v.tech, reason: v.reason }
-        : { ticker: s.ticker, tech: true, reason: '未分類，保留' };
+        ? { ticker: s.ticker, tech: !!v.tech, reason: v.reason, ok: true }
+        : { ticker: s.ticker, tech: true, reason: '未分類，保留', ok: false };
     });
   } catch (error) {
-    console.warn(`[classifyTechStocks] failed, keeping all: ${error}`);
-    return keepAll('分類失敗，保留');
+    console.warn(`[classifyTechStocks] attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ${error}`);
+    if (attempt < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
   }
+  }
+  return keepAll('分類失敗，保留');
 }

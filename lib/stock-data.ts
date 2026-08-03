@@ -271,6 +271,8 @@ export async function getStoredPrices(
 export interface SectorProfile {
   sector: string | null;
   industry: string | null;
+  /** Yahoo's business description — the grounding that makes ETFs classifiable. */
+  summary: string | null;
 }
 
 /**
@@ -280,13 +282,14 @@ export interface SectorProfile {
 export async function fetchSectorProfile(tickerNormalized: string): Promise<SectorProfile> {
   try {
     const r = await yahooFinance.quoteSummary(tickerNormalized, { modules: ['assetProfile'] }) as {
-      assetProfile?: { sector?: string; industry?: string };
+      assetProfile?: { sector?: string; industry?: string; longBusinessSummary?: string };
     };
     return {
       sector: r.assetProfile?.sector || null,
       industry: r.assetProfile?.industry || null,
+      summary: r.assetProfile?.longBusinessSummary?.replace(/\s+/g, ' ').slice(0, 300) || null,
     };
   } catch {
-    return { sector: null, industry: null };
+    return { sector: null, industry: null, summary: null };
   }
 }

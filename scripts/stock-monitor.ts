@@ -106,19 +106,25 @@ async function main() {
             name: s.name,
             sector: profiles[idx].sector,
             industry: profiles[idx].industry,
+            summary: profiles[idx].summary,
           }))
         );
+        // Only cache a verdict the model actually produced. Caching a failed
+        // call would set sector_checked_at and freeze the fallback "keep"
+        // forever, turning one transient error into permanent bad data.
         await Promise.all(batch.map((s, idx) =>
-          supabaseAdmin
-            .from('watchlist_stocks')
-            .update({
-              sector: profiles[idx].sector,
-              industry: profiles[idx].industry,
-              is_tech: verdicts[idx].tech,
-              tech_reason: verdicts[idx].reason,
-              sector_checked_at: new Date().toISOString(),
-            })
-            .eq('id', s.id)
+          verdicts[idx].ok
+            ? supabaseAdmin
+                .from('watchlist_stocks')
+                .update({
+                  sector: profiles[idx].sector,
+                  industry: profiles[idx].industry,
+                  is_tech: verdicts[idx].tech,
+                  tech_reason: verdicts[idx].reason,
+                  sector_checked_at: new Date().toISOString(),
+                })
+                .eq('id', s.id)
+            : Promise.resolve()
         ));
         batch.forEach((s, idx) => {
           console.log(`  ${s.ticker_normalized}: ${verdicts[idx].tech ? '科技' : '非科技'} — ${verdicts[idx].reason}`);

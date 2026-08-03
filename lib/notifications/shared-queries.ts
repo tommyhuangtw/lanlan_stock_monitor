@@ -250,13 +250,21 @@ export async function fetchOpportunities(): Promise<{
     return { opportunities: [], totalStocksScanned: 0 };
   }
 
+  // Only stocks still being tracked. Alerts outlive archival, so without this
+  // a stock archived today keeps showing up here for another 7 days.
   const stockIds = [...new Set(alerts.map(a => a.watchlist_stock_id))];
   const { data: stocks } = await supabaseAdmin
     .from('watchlist_stocks')
     .select('id, ticker, market, kol_sources, consensus')
+    .eq('status', 'active')
     .in('id', stockIds);
 
   const stockMap = new Map((stocks || []).map(s => [s.id, s]));
+  const activeAlerts = alerts.filter(a => stockMap.has(a.watchlist_stock_id));
+
+  if (activeAlerts.length === 0) {
+    return { opportunities: [], totalStocksScanned: 0 };
+  }
 
   // Deduplicate by ticker, aggregate alert types, pick best info
   const tickerMap = new Map<string, {
@@ -266,13 +274,13 @@ export async function fetchOpportunities(): Promise<{
     kolName: string; kolDate: string; score: number;
   }>();
 
-  for (const alert of alerts) {
+  for (const alert of activeAlerts) {
     const existing = tickerMap.get(alert.ticker);
     const snapshot = alert.technical_snapshot as { rsi14?: number; dropFrom20dHigh?: number } | null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const kolCtx = (alert.kol_context as Array<{ kol: string; date: string }>) || [];
     const stock = stockMap.get(alert.watchlist_stock_id);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const kolSources = (stock?.kol_sources as Array<{ kol: string; date: string; confidence: string }>) || [];
 
     const alertScore = ALERT_TYPE_CONFIG[alert.alert_type]?.score || 5;
@@ -306,7 +314,7 @@ export async function fetchOpportunities(): Promise<{
       alertTypes: [...o.alertTypes],
     }));
 
-  return { opportunities, totalStocksScanned: stockIds.length };
+  return { opportunities, totalStocksScanned: stockMap.size };
 }
 
 /**

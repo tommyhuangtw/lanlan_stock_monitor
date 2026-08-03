@@ -12,6 +12,7 @@ import { log } from './logger';
 
 interface YahooQuoteResult {
   regularMarketPrice?: number;
+  marketCap?: number;
   regularMarketOpen?: number;
   regularMarketDayHigh?: number;
   regularMarketDayLow?: number;
@@ -39,6 +40,7 @@ export interface StockQuote {
   volume: number;
   trailingPE?: number;
   forwardPE?: number;
+  marketCap?: number;
 }
 
 /**
@@ -62,6 +64,7 @@ export async function fetchLatestQuote(tickerNormalized: string): Promise<StockQ
       volume: result.regularMarketVolume || 0,
       trailingPE: result.trailingPE ?? undefined,
       forwardPE: result.forwardPE ?? undefined,
+      marketCap: result.marketCap ?? undefined,
     };
   } catch (error) {
     log('error', `[fetchLatestQuote] Failed for ${tickerNormalized}: ${error}`);
@@ -176,6 +179,7 @@ export async function fetchAndStorePrices(marketFilter?: 'US' | 'TW'): Promise<{
         last_price_update: new Date().toISOString(),
         trailing_pe: quote.trailingPE ?? null,
         forward_pe: quote.forwardPE ?? null,
+        market_cap_usd: toUsdMarketCap(quote.marketCap, stock.ticker_normalized),
         consecutive_fetch_failures: 0,
       };
       // Set price_at_first_mention if not yet set
@@ -292,4 +296,21 @@ export async function fetchSectorProfile(tickerNormalized: string): Promise<Sect
   } catch {
     return { sector: null, industry: null, summary: null };
   }
+}
+
+/**
+ * Yahoo reports market cap in the listing's own currency, so TW values arrive
+ * in TWD. Normalise to USD before storing, or a NT$50B small cap outranks a
+ * US$20B one.
+ *
+ * ponytail: fixed FX rate. Only used to bucket companies into broad size
+ * tiers, where a few percent of drift changes nothing. Pull a live rate if
+ * this ever feeds anything that needs precision.
+ */
+const TWD_PER_USD = 32;
+
+function toUsdMarketCap(marketCap: number | undefined, tickerNormalized: string): number | null {
+  if (!marketCap || marketCap <= 0) return null;
+  const isTw = /\.TWO?$/.test(tickerNormalized);
+  return Math.round(isTw ? marketCap / TWD_PER_USD : marketCap);
 }

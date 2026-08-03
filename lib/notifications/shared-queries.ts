@@ -179,6 +179,20 @@ export interface StockOpinion {
   priceLevel?: string;
 }
 
+/**
+ * Bonus added to a stock's signal score so recognisable companies surface
+ * first. Sized against ALERT_TYPE_CONFIG (10–30 per signal) — enough to lift a
+ * mega cap above an obscure name with one more signal, not enough to bury a
+ * genuinely strong setup on a small cap.
+ */
+export function familiarityBonus(marketCapUsd: number | null | undefined): number {
+  if (!marketCapUsd) return 0;
+  if (marketCapUsd >= 200e9) return 30; // mega: NVDA, META, MSFT
+  if (marketCapUsd >= 50e9) return 20;  // large: MU, AMD, 台積電
+  if (marketCapUsd >= 10e9) return 10;  // mid
+  return 0;
+}
+
 export interface OpportunityItem {
   ticker: string;
   market: string;
@@ -255,7 +269,7 @@ export async function fetchOpportunities(): Promise<{
   const stockIds = [...new Set(alerts.map(a => a.watchlist_stock_id))];
   const { data: stocks } = await supabaseAdmin
     .from('watchlist_stocks')
-    .select('id, ticker, market, kol_sources, consensus')
+    .select('id, ticker, market, kol_sources, consensus, market_cap_usd')
     .eq('status', 'active')
     .in('id', stockIds);
 
@@ -284,6 +298,7 @@ export async function fetchOpportunities(): Promise<{
     const kolSources = (stock?.kol_sources as Array<{ kol: string; date: string; confidence: string }>) || [];
 
     const alertScore = ALERT_TYPE_CONFIG[alert.alert_type]?.score || 5;
+    const familiarity = familiarityBonus(stock?.market_cap_usd);
     const kolName = kolCtx[0]?.kol || kolSources[0]?.kol || '';
     const kolDate = kolCtx[0]?.date || kolSources[0]?.date || '';
 
@@ -301,7 +316,7 @@ export async function fetchOpportunities(): Promise<{
         dropPct: snapshot?.dropFrom20dHigh ?? null,
         kolName,
         kolDate: kolDate ? formatShortDate(kolDate) : '',
-        score: alertScore,
+        score: alertScore + familiarity,
       });
     }
   }

@@ -975,24 +975,32 @@ export async function classifyEpisodeRelevance(
 // Tech-stock classification
 // ============================================================
 
-const TECH_SYSTEM_PROMPT = `你是股票分類器。判斷每一檔是否屬於台灣投資人口中的「科技股」。
+const TECH_SYSTEM_PROMPT = `你是股票分類器。判斷每一檔是否屬於這個投資組合的追蹤範圍。
 
-算科技股：
+追蹤範圍 = 科技 + AI 電力與廠務供應鏈：
 - 半導體、IC 設計、晶圓代工、封測、設備、材料
 - 軟體、雲端、SaaS、資安、AI
 - 消費性電子、硬體、網通、伺服器
 - 網路平台、電商、社群、串流科技公司
-- 科技類 ETF（如 QQQ、SMH、SOXX）、AI 或半導體主題 ETF
+- 能源：石油、天然氣、煉油
+- 電力公用事業、發電、電網
+- 電力設備、重電、變壓器、電機、電力零組件
+- 半導體廠房的廠務工程、無塵室、機電工程
+- 科技、半導體、AI 或能源主題 ETF
 
-不算科技股：
+不在追蹤範圍：
 - 銀行、保險、券商、金控
 - 傳統媒體、有線電視、電影公司（如 Comcast、Warner Bros）
-- 生技醫療、能源、公用事業、REIT、原物料
-- 食品、零售通路、餐飲、汽車、航空、工業機械
+- 生技醫療
+- REIT、房地產
+- 食品、零售通路、餐飲、飯店、旅遊
+- 汽車、航空、航運、物流、倉儲
+- 一般工業機械、農機、營建（不含半導體廠務）
+- 礦業、水泥、化工等原物料
 - 大盤或債券 ETF（如 VOO、TLT、IWM）
 
 每筆都附了 Yahoo 的業務描述，請以業務描述為主要依據 —— ETF 沒有 GICS 產業別，只能靠描述判斷。
-判斷依據以「公司實際主要業務」為準，不要只看 GICS 產業別 —— GICS 會把 Google 和 Meta 放在 Communication Services，但它們是科技股；也會把 Comcast 放在同一類，但它不是。
+判斷依據以「公司實際主要業務」為準，不要只看 GICS 產業別 —— GICS 會把 Google 和 Meta 放在 Communication Services，但它們在範圍內；也會把 Comcast 放在同一類，但它不在。同理，半導體廠務工程商的 GICS 是 Industrials，但它們在範圍內。
 
 每一檔輸入都有一個 id，請用 id 回覆，不要改寫或省略任何一筆。
 直接輸出純 JSON：{"results":[{"id":1,"tech":true,"reason":"半導體"}]}

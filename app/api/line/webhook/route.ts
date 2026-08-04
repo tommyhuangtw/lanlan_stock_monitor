@@ -853,7 +853,7 @@ async function buildMajorsReply(): Promise<Msg[]> {
     // Analyst consensus — the valuation half of the score
     const val: string[] = [];
     if (s.upsidePct !== null) {
-      const src = s.analyst.targetSource === 'recent' ? `近90天${s.analyst.recentTargetCount}筆` : '全期';
+      const src = s.analyst.targetSource === 'recent' ? `近30天${s.analyst.recentTargetCount}筆` : '全期';
       val.push(`目標價中位數(${src}) ${s.upsidePct >= 0 ? '+' : ''}${s.upsidePct.toFixed(0)}%`);
     }
     if (s.analyst.trailingPE) val.push(`PE ${s.analyst.trailingPE.toFixed(1)}`);

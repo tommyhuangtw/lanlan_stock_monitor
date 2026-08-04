@@ -300,9 +300,21 @@ export interface AnalystView {
   currentMonthAnalysts: number;
 }
 
-/** Window for the dated-target median, and the minimum firms it needs. */
-const RECENT_TARGET_DAYS = 90;
-const MIN_RECENT_TARGETS = 20;
+/**
+ * Window for the dated-target median, and the minimum firms it needs.
+ *
+ * 30 days keeps only views published this month. The count has to drop to 10
+ * for that to cover anything: at 20 only MSFT (27) and AMZN (28) qualify, at
+ * 10 five of the eight majors do. NVDA (1), META and 2330.TW (none) fall back
+ * to Yahoo's all-period median.
+ *
+ * Note this median is a recency-biased subsample, not the full consensus —
+ * analysts mostly revise around earnings and news, so it reflects those
+ * reacting to something. That is the intent, but it is not the same number as
+ * "what all 60 covering analysts think".
+ */
+const RECENT_TARGET_DAYS = 30;
+const MIN_RECENT_TARGETS = 10;
 
 /**
  * Analyst consensus from Yahoo.

@@ -276,7 +276,12 @@ export interface AnalystView {
   /** Live price from the same call — the majors card shows untracked stocks
    *  whose stored price stops updating (TSLA sat 2 months stale at $435 vs $322). */
   currentPrice: number | null;
+  /** Median target actually used, and where it came from. */
   targetMedian: number | null;
+  targetSource: 'recent' | 'yahoo' | null;
+  /** Dated targets behind `recent`, within RECENT_TARGET_DAYS. */
+  recentTargetCount: number;
+  trailingPE: number | null;
   targetMean: number | null;
   targetLow: number | null;
   targetHigh: number | null;
@@ -295,6 +300,10 @@ export interface AnalystView {
   currentMonthAnalysts: number;
 }
 
+/** Window for the dated-target median, and the minimum firms it needs. */
+const RECENT_TARGET_DAYS = 90;
+const MIN_RECENT_TARGETS = 20;
+
 /**
  * Analyst consensus from Yahoo.
  *
@@ -304,13 +313,14 @@ export interface AnalystView {
  */
 export async function fetchAnalystView(tickerNormalized: string): Promise<AnalystView> {
   const empty: AnalystView = {
-    currentPrice: null, targetMedian: null, targetMean: null, targetLow: null, targetHigh: null,
+    currentPrice: null, targetMedian: null, targetSource: null, recentTargetCount: 0,
+    trailingPE: null, targetMean: null, targetLow: null, targetHigh: null,
     recommendationMean: null, analystCount: 0, forwardPE: null, pegRatio: null,
     dispersionPct: null, lastRatingDate: null, currentMonthAnalysts: 0,
   };
   try {
     const r = await yahooFinance.quoteSummary(tickerNormalized, {
-      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory', 'recommendationTrend'],
+      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory', 'recommendationTrend', 'summaryDetail'],
     }) as {
       financialData?: {
         currentPrice?: number;
@@ -319,13 +329,29 @@ export async function fetchAnalystView(tickerNormalized: string): Promise<Analys
         recommendationMean?: number; numberOfAnalystOpinions?: number;
       };
       defaultKeyStatistics?: { forwardPE?: number; pegRatio?: number };
-      upgradeDowngradeHistory?: { history?: Array<{ epochGradeDate?: Date | number }> };
+      upgradeDowngradeHistory?: { history?: Array<{ epochGradeDate?: Date | number; currentPriceTarget?: number }> };
+      summaryDetail?: { trailingPE?: number };
       recommendationTrend?: { trend?: Array<{ period?: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }> };
     };
     const f = r.financialData || {};
     const k = r.defaultKeyStatistics || {};
 
-    const median = f.targetMedianPrice ?? null;
+    // Prefer a median of dated targets over Yahoo's undated one. 30 days is
+    // too thin to qualify anything — the best-covered name (MSFT) logs 27 —
+    // so the window is 90 days with 20+ firms, else fall back to Yahoo.
+    const history = (r.upgradeDowngradeHistory?.history || [])
+      .filter(h => h.epochGradeDate && h.currentPriceTarget)
+      .map(h => ({ at: new Date(h.epochGradeDate!).getTime(), target: h.currentPriceTarget! }));
+    const cutoff = Date.now() - RECENT_TARGET_DAYS * 86400_000;
+    const recent = history.filter(h => h.at >= cutoff).map(h => h.target).sort((a, b) => a - b);
+
+    const recentMedian = recent.length >= MIN_RECENT_TARGETS
+      ? (recent.length % 2
+          ? recent[(recent.length - 1) / 2]
+          : (recent[recent.length / 2 - 1] + recent[recent.length / 2]) / 2)
+      : null;
+
+    const median = recentMedian ?? f.targetMedianPrice ?? null;
     const dispersionPct = median && f.targetHighPrice && f.targetLowPrice
       ? ((f.targetHighPrice - f.targetLowPrice) / median) * 100
       : null;
@@ -346,6 +372,9 @@ export async function fetchAnalystView(tickerNormalized: string): Promise<Analys
       currentPrice: f.currentPrice ?? null,
       currentMonthAnalysts,
       targetMedian: median,
+      targetSource: recentMedian !== null ? 'recent' as const : (f.targetMedianPrice ? 'yahoo' as const : null),
+      recentTargetCount: recent.length,
+      trailingPE: r.summaryDetail?.trailingPE ?? null,
       dispersionPct,
       lastRatingDate,
       targetMean: f.targetMeanPrice ?? null,

@@ -12,6 +12,7 @@ import { supabaseAdmin } from '../supabase';
 import { openrouter, PRO_MODEL, SectorTheme } from '../openrouter';
 import { normalizeTicker, isAllowedTicker, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
+import { checkTechStock, techColumns } from '../tech-filter';
 import type { NewWatchlistStock } from '../notifications/line';
 
 const PERPLEXITY_MODEL = 'perplexity/sonar-pro-search';
@@ -175,9 +176,18 @@ export async function expandSectors(): Promise<ExpandSectorsResult> {
 
           if (existing) continue; // Already tracked
 
+          // Sector expansion is the worst offender here — an AI-picked theme
+          // like 能源與原油 pulls in Phillips 66 and Marriott by design.
+          const gate = await checkTechStock(normalized.normalized, stock.ticker, stock.name || normalized.name);
+          if (!gate.tech) {
+            log('info', `[expandSectors] 略過 ${stock.ticker}：非科技股（${gate.reason}）`);
+            continue;
+          }
+
           const { error: insertError } = await supabaseAdmin
             .from('watchlist_stocks')
             .insert({
+              ...techColumns(gate),
               ticker: stock.ticker,
               ticker_normalized: normalized.normalized,
               market: normalized.market,

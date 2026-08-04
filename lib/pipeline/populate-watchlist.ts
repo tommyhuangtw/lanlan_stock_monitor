@@ -10,6 +10,7 @@
 import { supabaseAdmin } from '../supabase';
 import { normalizeTicker, parsePriceLevels, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
+import { checkTechStock, techColumns } from '../tech-filter';
 import type { NewWatchlistStock } from '../notifications/line';
 
 export interface PopulateWatchlistResult {
@@ -277,10 +278,20 @@ async function upsertWatchlistStock(
     if (error) throw error;
     results.updatedStocks++;
   } else {
+    // Gate before insert, not after: the monitor would archive a non-tech name
+    // hours later, but the pipeline announces it to LINE in between.
+    const gate = await checkTechStock(params.tickerNormalized, params.ticker, params.name);
+    if (!gate.tech) {
+      log('info', `[populateWatchlist] 略過 ${params.ticker}：非科技股（${gate.reason}）`);
+      results.skipped++;
+      return;
+    }
+
     // Insert new stock
     const { error } = await supabaseAdmin
       .from('watchlist_stocks')
       .insert({
+        ...techColumns(gate),
         ticker: params.ticker,
         ticker_normalized: params.tickerNormalized,
         market: params.market,

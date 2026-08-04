@@ -272,135 +272,43 @@ export async function getStoredPrices(
 // Sector classification
 // ============================================================
 
-export interface AnalystView {
-  /** Live price from the same call — the majors card shows untracked stocks
-   *  whose stored price stops updating (TSLA sat 2 months stale at $435 vs $322). */
+export interface Valuation {
+  /** Live price from the same call — stored prices only refresh for tracked stocks. */
   currentPrice: number | null;
-  /** Median target actually used, and where it came from. */
-  targetMedian: number | null;
-  targetSource: 'recent' | 'yahoo' | null;
-  /** Dated targets behind `recent`, within RECENT_TARGET_DAYS. */
-  recentTargetCount: number;
   trailingPE: number | null;
-  targetMean: number | null;
-  targetLow: number | null;
-  targetHigh: number | null;
-  /** 1 = strong buy … 5 = strong sell */
-  recommendationMean: number | null;
-  analystCount: number;
   forwardPE: number | null;
-  pegRatio: number | null;
-  /** (high − low) / median. Wide means the analysts disagree, so the target means less. */
-  dispersionPct: number | null;
-  /** Most recent dated analyst action. Unreliable: absent for TW listings and
-   *  stuck at 2024-09-30 for META, whose coverage is demonstrably current. */
-  lastRatingDate: string | null;
-  /** Analysts covering the stock this month. The dependable currency check —
-   *  present for TW too, and its month-on-month drift shows coverage is live. */
-  currentMonthAnalysts: number;
 }
 
 /**
- * Window for the dated-target median, and the minimum firms it needs.
+ * Valuation snapshot from Yahoo.
  *
- * 30 days keeps only views published this month. The count has to drop to 10
- * for that to cover anything: at 20 only MSFT (27) and AMZN (28) qualify, at
- * 10 five of the eight majors do. NVDA (1), META and 2330.TW (none) fall back
- * to Yahoo's all-period median.
- *
- * Note this median is a recency-biased subsample, not the full consensus —
- * analysts mostly revise around earnings and news, so it reflects those
- * reacting to something. That is the intent, but it is not the same number as
- * "what all 60 covering analysts think".
+ * Analyst price targets were tried and dropped. Yahoo's targetMedianPrice is
+ * undated, and a dated median built from upgradeDowngradeHistory covered only
+ * five of the eight majors even at a 30-day window — META's ratings feed is
+ * stuck in 2024 and TW listings have none at all. Forward P/E is populated
+ * everywhere including TW and needs no freshness caveat: it is the live price
+ * over the forward EPS estimate, verified to reproduce Yahoo's own forwardPE
+ * exactly on both US and TW names.
  */
-const RECENT_TARGET_DAYS = 30;
-const MIN_RECENT_TARGETS = 10;
-
-/**
- * Analyst consensus from Yahoo.
- *
- * analystCount matters: 亞翔 (6139) carries a single analyst with a target 91%
- * above spot, which is noise rather than consensus. Callers should require a
- * handful before trusting targetMean.
- */
-export async function fetchAnalystView(tickerNormalized: string): Promise<AnalystView> {
-  const empty: AnalystView = {
-    currentPrice: null, targetMedian: null, targetSource: null, recentTargetCount: 0,
-    trailingPE: null, targetMean: null, targetLow: null, targetHigh: null,
-    recommendationMean: null, analystCount: 0, forwardPE: null, pegRatio: null,
-    dispersionPct: null, lastRatingDate: null, currentMonthAnalysts: 0,
-  };
+export async function fetchValuation(tickerNormalized: string): Promise<Valuation> {
   try {
     const r = await yahooFinance.quoteSummary(tickerNormalized, {
-      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory', 'recommendationTrend', 'summaryDetail'],
+      modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'],
     }) as {
-      financialData?: {
-        currentPrice?: number;
-        targetMedianPrice?: number; targetMeanPrice?: number;
-        targetLowPrice?: number; targetHighPrice?: number;
-        recommendationMean?: number; numberOfAnalystOpinions?: number;
-      };
-      defaultKeyStatistics?: { forwardPE?: number; pegRatio?: number };
-      upgradeDowngradeHistory?: { history?: Array<{ epochGradeDate?: Date | number; currentPriceTarget?: number }> };
-      summaryDetail?: { trailingPE?: number };
-      recommendationTrend?: { trend?: Array<{ period?: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }> };
+      financialData?: { currentPrice?: number };
+      defaultKeyStatistics?: { forwardPE?: number };
+      summaryDetail?: { trailingPE?: number; forwardPE?: number };
     };
-    const f = r.financialData || {};
-    const k = r.defaultKeyStatistics || {};
-
-    // Prefer a median of dated targets over Yahoo's undated one. 30 days is
-    // too thin to qualify anything — the best-covered name (MSFT) logs 27 —
-    // so the window is 90 days with 20+ firms, else fall back to Yahoo.
-    const history = (r.upgradeDowngradeHistory?.history || [])
-      .filter(h => h.epochGradeDate && h.currentPriceTarget)
-      .map(h => ({ at: new Date(h.epochGradeDate!).getTime(), target: h.currentPriceTarget! }));
-    const cutoff = Date.now() - RECENT_TARGET_DAYS * 86400_000;
-    const recent = history.filter(h => h.at >= cutoff).map(h => h.target).sort((a, b) => a - b);
-
-    const recentMedian = recent.length >= MIN_RECENT_TARGETS
-      ? (recent.length % 2
-          ? recent[(recent.length - 1) / 2]
-          : (recent[recent.length / 2 - 1] + recent[recent.length / 2]) / 2)
-      : null;
-
-    const median = recentMedian ?? f.targetMedianPrice ?? null;
-    const dispersionPct = median && f.targetHighPrice && f.targetLowPrice
-      ? ((f.targetHighPrice - f.targetLowPrice) / median) * 100
-      : null;
-
-    const dates = (r.upgradeDowngradeHistory?.history || [])
-      .map(h => (h.epochGradeDate ? new Date(h.epochGradeDate).getTime() : 0))
-      .filter(Boolean);
-    const lastRatingDate = dates.length
-      ? new Date(Math.max(...dates)).toISOString().slice(0, 10)
-      : null;
-
-    const nowTrend = (r.recommendationTrend?.trend || []).find(t => t.period === '0m');
-    const currentMonthAnalysts = nowTrend
-      ? nowTrend.strongBuy + nowTrend.buy + nowTrend.hold + nowTrend.sell + nowTrend.strongSell
-      : 0;
-
     return {
-      currentPrice: f.currentPrice ?? null,
-      currentMonthAnalysts,
-      targetMedian: median,
-      targetSource: recentMedian !== null ? 'recent' as const : (f.targetMedianPrice ? 'yahoo' as const : null),
-      recentTargetCount: recent.length,
+      currentPrice: r.financialData?.currentPrice ?? null,
       trailingPE: r.summaryDetail?.trailingPE ?? null,
-      dispersionPct,
-      lastRatingDate,
-      targetMean: f.targetMeanPrice ?? null,
-      targetLow: f.targetLowPrice ?? null,
-      targetHigh: f.targetHighPrice ?? null,
-      recommendationMean: f.recommendationMean ?? null,
-      analystCount: f.numberOfAnalystOpinions ?? 0,
-      forwardPE: k.forwardPE ?? null,
-      pegRatio: k.pegRatio ?? null,
+      forwardPE: r.defaultKeyStatistics?.forwardPE ?? r.summaryDetail?.forwardPE ?? null,
     };
   } catch {
-    return empty;
+    return { currentPrice: null, trailingPE: null, forwardPE: null };
   }
 }
+
 
 export interface SectorProfile {
   sector: string | null;

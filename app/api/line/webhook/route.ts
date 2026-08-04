@@ -850,35 +850,16 @@ async function buildMajorsReply(): Promise<Msg[]> {
     }
     body.push({ type: 'text', text: bits.join('  ｜  '), size: 'xxs', color: '#888888', margin: 'xs' });
 
-    // Analyst consensus — the valuation half of the score
+    // Valuation — the second half of the score
     const val: string[] = [];
-    if (s.upsidePct !== null) {
-      const src = s.analyst.targetSource === 'recent' ? `近30天${s.analyst.recentTargetCount}筆` : '全期';
-      val.push(`目標價中位數(${src}) ${s.upsidePct >= 0 ? '+' : ''}${s.upsidePct.toFixed(0)}%`);
-    }
-    if (s.analyst.trailingPE) val.push(`PE ${s.analyst.trailingPE.toFixed(1)}`);
-    if (s.analyst.forwardPE) val.push(`預估PE ${s.analyst.forwardPE.toFixed(1)}`);
+    if (s.valuation.forwardPE) val.push(`預估PE ${s.valuation.forwardPE.toFixed(1)}`);
+    if (s.valuation.trailingPE) val.push(`PE ${s.valuation.trailingPE.toFixed(1)}`);
     if (val.length > 0) {
-      const up = (s.upsidePct ?? 0) >= 20 ? '#1B5E20' : (s.upsidePct ?? 0) >= 0 ? '#666666' : '#B71C1C';
-      body.push({ type: 'text', text: `🎯 ${val.join('  ｜  ')}`, size: 'xxs', color: up, wrap: true, margin: 'xs' });
+      const pe = s.valuation.forwardPE ?? 99;
+      const color = pe <= 20 ? '#1B5E20' : pe <= 30 ? '#666666' : '#B71C1C';
+      body.push({ type: 'text', text: `🎯 ${val.join('  ｜  ')}`, size: 'xxs', color, wrap: true, margin: 'xs' });
     }
 
-    // How much to trust that target: how many analysts, how much they disagree,
-    // and how recently any of them actually moved.
-    const q: string[] = [];
-    if (s.analyst.currentMonthAnalysts > 0) q.push(`本月 ${s.analyst.currentMonthAnalysts} 位分析師`);
-    else if (s.analyst.analystCount > 0) q.push(`${s.analyst.analystCount} 位（本月無更新）`);
-    if (s.analyst.dispersionPct !== null) {
-      const d = s.analyst.dispersionPct;
-      q.push(`分歧 ${d.toFixed(0)}%${d > 80 ? '（大）' : d < 40 ? '（小）' : ''}`);
-    }
-    if (q.length > 0) {
-      body.push({ type: 'text', text: `   ${q.join('  ｜  ')}`, size: 'xxs', color: '#AAAAAA', wrap: true });
-    }
-
-    if (s.alertLabels.length > 0) {
-      body.push({ type: 'text', text: `⚡ ${s.alertLabels.slice(0, 4).join('、')}`, size: 'xxs', color: '#E65100', wrap: true, margin: 'xs' });
-    }
     if (!s.tracked) {
       body.push({ type: 'text', text: '（目前未在監控池）', size: 'xxs', color: '#BDBDBD', margin: 'xs' });
     }
@@ -899,7 +880,7 @@ async function buildMajorsReply(): Promise<Msg[]> {
       body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none', contents: body },
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
-        contents: [{ type: 'text', text: '分數 = 技術位置（RSI、均線）+ 分析師目標價與評等', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true }],
+        contents: [{ type: 'text', text: '分數 = 技術位置（RSI、均線）+ 預估本益比', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true }],
       },
     },
   }];

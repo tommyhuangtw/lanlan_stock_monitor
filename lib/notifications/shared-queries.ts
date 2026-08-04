@@ -7,7 +7,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase';
-import { getStoredPrices, fetchAnalystView, type AnalystView } from '@/lib/stock-data';
+import { getStoredPrices, fetchValuation, type Valuation } from '@/lib/stock-data';
 import { computeTechnicalSnapshot, type TechnicalSnapshot } from '@/lib/technical-indicators';
 
 // ============================================================
@@ -685,20 +685,10 @@ export interface MajorStock {
   sma200: number | null;
   /** 0–100. Entry attractiveness, not signal count — see entryScore(). */
   score: number;
-  upsidePct: number | null;
-  analyst: AnalystView;
+  valuation: Valuation;
   alertLabels: string[];
   tracked: boolean;
 }
-
-/**
- * Consensus needs this many analysts covering it *this month*. Counting total
- * coverage would keep quoting a target nobody is maintaining; keying off
- * upgradeDowngradeHistory instead would discard META (whose feed is stuck in
- * 2024 despite 62 current analysts) and every TW listing, which has no such
- * feed at all.
- */
-const MIN_ANALYSTS = 5;
 
 /**
  * Entry attractiveness, 0–100. Deliberately not the sum of recent alerts:
@@ -706,8 +696,12 @@ const MIN_ANALYSTS = 5;
  * scored 71 at RSI 77 and +21.5% over its 50-day — the worst moment to buy.
  *
  * Two halves, each 0–50:
- *   technical — cheaper relative to its own recent range scores higher
- *   analyst   — consensus upside, ignored below MIN_ANALYSTS
+ *   technical — cheaper against its own recent range scores higher
+ *   valuation — forward P/E, 15 or below full marks, 40 or above nothing
+ *
+ * The P/E band is calibrated for large-cap tech and semis, which is all this
+ * list contains. It would misjudge a utility or a loss-making name, so it
+ * stays scoped to the majors rather than being reused across the watchlist.
  *
  * A gauge for ranking a fixed list, not a recommendation.
  */
@@ -715,10 +709,10 @@ function entryScore(
   price: number | null,
   rsi: number | null,
   sma50: number | null,
-  analyst: AnalystView,
-): { score: number; upsidePct: number | null } {
-  // Technical: RSI 30 → full marks, RSI 70+ → nothing. Trading below the
-  // 50-day adds, above it subtracts.
+  valuation: Valuation,
+): number {
+  // Technical: RSI 30 → full marks, RSI 70+ → nothing. Below the 50-day adds,
+  // above it subtracts.
   let technical = 25;
   if (rsi !== null) technical = Math.max(0, Math.min(40, ((70 - rsi) / 40) * 40));
   if (price && sma50) {
@@ -727,33 +721,23 @@ function entryScore(
   }
   technical = Math.max(0, Math.min(50, technical));
 
-  // Analyst: 0% upside → 0, 40%+ → full marks. Median rather than mean, since
-  // one outlier moves the mean a lot (MSFT: high 870 against a 550 median).
-  let analystScore = 0;
-  let upsidePct: number | null = null;
-  if (price && analyst.targetMedian && analyst.currentMonthAnalysts >= MIN_ANALYSTS) {
-    upsidePct = ((analyst.targetMedian - price) / price) * 100;
-    analystScore = Math.max(0, Math.min(40, (upsidePct / 40) * 40));
-    // Consensus rating: 1 = strong buy, 5 = strong sell.
-    if (analyst.recommendationMean !== null) {
-      analystScore += Math.max(0, Math.min(10, ((3 - analyst.recommendationMean) / 2) * 10));
-    }
-    // Discount when they disagree. NVDA's targets span 180–500 (107% of the
-    // median), which is not a consensus worth ranking on; META's span 54%.
-    if (analyst.dispersionPct !== null && analyst.dispersionPct > 60) {
-      analystScore *= Math.max(0.4, 1 - (analyst.dispersionPct - 60) / 100);
-    }
-  }
+  // Valuation: linear from 15 (full) to 40 (nothing).
+  const pe = valuation.forwardPE;
+  const value = pe !== null && pe > 0
+    ? Math.max(0, Math.min(50, ((40 - pe) / 25) * 50))
+    : 0;
 
-  return { score: Math.round(technical + Math.max(0, Math.min(50, analystScore))), upsidePct };
+  return Math.round(technical + value);
 }
 
 /**
  * Entry read on the majors, in MAJOR_TICKERS order.
  *
- * Ranked by entry attractiveness (see entryScore) rather than by how many
- * alerts fired, so a stock that has already run up doesn't rank highest.
- * Recent signals are still shown as context.
+ * Ranked by entry attractiveness (see entryScore) — technical position and
+ * forward P/E — rather than by how many alerts fired, so a stock that has
+ * already run up doesn't rank highest. Recent signals are still shown as
+ * context. A stock with no recent signal still appears, because "no setup
+ * here" is the answer being asked for.
  */
 export async function fetchMajorStocks(): Promise<MajorStock[]> {
   const sevenDaysAgo = new Date();
@@ -788,10 +772,10 @@ export async function fetchMajorStocks(): Promise<MajorStock[]> {
       if (cfg) labels.add(cfg.label);
     }
 
-    const analyst = await fetchAnalystView(normalized);
+    const valuation = await fetchValuation(normalized);
     // Live price first: stored prices only refresh for tracked stocks.
-    const price = analyst.currentPrice ?? stock.current_price ?? snapshot?.currentPrice ?? null;
-    const { score, upsidePct } = entryScore(price, snapshot?.rsi14 ?? null, snapshot?.sma50 ?? null, analyst);
+    const price = valuation.currentPrice ?? stock.current_price ?? snapshot?.currentPrice ?? null;
+    const score = entryScore(price, snapshot?.rsi14 ?? null, snapshot?.sma50 ?? null, valuation);
 
     return {
       ticker: stock.ticker,
@@ -802,8 +786,7 @@ export async function fetchMajorStocks(): Promise<MajorStock[]> {
       sma50: snapshot?.sma50 ?? null,
       sma200: snapshot?.sma200 ?? null,
       score,
-      upsidePct,
-      analyst,
+      valuation,
       alertLabels: [...labels],
       tracked: stock.status === 'active',
     };

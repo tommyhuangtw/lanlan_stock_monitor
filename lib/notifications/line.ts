@@ -450,24 +450,3 @@ export async function sendNewStockAlerts(stocks: NewWatchlistStock[]): Promise<n
 
   return sentCount;
 }
-
-/**
- * Send a LINE notification listing archived (cleaned-up) watchlist stocks.
- */
-export async function sendCleanupNotification(
-  entries: CleanupEntry[],
-  usCurrent: number,
-  twCurrent: number,
-): Promise<void> {
-  if (entries.length === 0) return;
-
-  const lines = [
-    `🗑 監控池清理（${entries.length} 檔已移除）`,
-    '',
-    ...entries.map(e => `• ${e.ticker} — ${e.reason}`),
-    '',
-    `目前監控：🇺🇸 ${usCurrent} 檔  🇹🇼 ${twCurrent} 檔`,
-  ];
-
-  await sendLineText(lines.join('\n'));
-}

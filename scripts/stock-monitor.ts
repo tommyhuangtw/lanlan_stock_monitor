@@ -10,7 +10,7 @@
 import { fetchAndStorePrices, backfillPrices, fetchSectorProfile } from '../lib/stock-data';
 import { classifyTechStocks } from '../lib/openrouter';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
-import { sendLineAlerts, sendCleanupNotification } from '../lib/notifications/line';
+import { sendLineAlerts } from '../lib/notifications/line';
 import type { CleanupEntry } from '../lib/notifications/line';
 import { sendEmailAlert, sendPipelineAlert } from '../lib/notifications/email-alert';
 import { generateAndSaveAliases } from '../lib/generate-aliases';
@@ -238,21 +238,12 @@ async function main() {
       }
     }
 
-    // Send cleanup notification
+    // Log only — not pushed to LINE. Cleanup is routine housekeeping now that
+    // the tech filter runs daily, and it isn't something the group needs to
+    // see. The current watchlist is always available via /清單.
     if (cleanupEntries.length > 0) {
-      const { count: usActive } = await supabaseAdmin
-        .from('watchlist_stocks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active')
-        .eq('market', 'US');
-      const { count: twActive } = await supabaseAdmin
-        .from('watchlist_stocks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active')
-        .eq('market', 'TW');
-
-      await sendCleanupNotification(cleanupEntries, usActive || 0, twActive || 0);
-      console.log(`  Sent cleanup notification (${cleanupEntries.length} stocks archived)`);
+      console.log(`  Archived ${cleanupEntries.length} stocks:`);
+      for (const e of cleanupEntries) console.log(`    - ${e.ticker}: ${e.reason}`);
     } else {
       console.log('  No stocks to clean up.');
     }

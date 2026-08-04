@@ -287,8 +287,12 @@ export interface AnalystView {
   pegRatio: number | null;
   /** (high − low) / median. Wide means the analysts disagree, so the target means less. */
   dispersionPct: number | null;
-  /** Most recent dated analyst action. Null for TW listings — Yahoo has none. */
+  /** Most recent dated analyst action. Unreliable: absent for TW listings and
+   *  stuck at 2024-09-30 for META, whose coverage is demonstrably current. */
   lastRatingDate: string | null;
+  /** Analysts covering the stock this month. The dependable currency check —
+   *  present for TW too, and its month-on-month drift shows coverage is live. */
+  currentMonthAnalysts: number;
 }
 
 /**
@@ -302,11 +306,11 @@ export async function fetchAnalystView(tickerNormalized: string): Promise<Analys
   const empty: AnalystView = {
     currentPrice: null, targetMedian: null, targetMean: null, targetLow: null, targetHigh: null,
     recommendationMean: null, analystCount: 0, forwardPE: null, pegRatio: null,
-    dispersionPct: null, lastRatingDate: null,
+    dispersionPct: null, lastRatingDate: null, currentMonthAnalysts: 0,
   };
   try {
     const r = await yahooFinance.quoteSummary(tickerNormalized, {
-      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory'],
+      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory', 'recommendationTrend'],
     }) as {
       financialData?: {
         currentPrice?: number;
@@ -316,6 +320,7 @@ export async function fetchAnalystView(tickerNormalized: string): Promise<Analys
       };
       defaultKeyStatistics?: { forwardPE?: number; pegRatio?: number };
       upgradeDowngradeHistory?: { history?: Array<{ epochGradeDate?: Date | number }> };
+      recommendationTrend?: { trend?: Array<{ period?: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }> };
     };
     const f = r.financialData || {};
     const k = r.defaultKeyStatistics || {};
@@ -332,8 +337,14 @@ export async function fetchAnalystView(tickerNormalized: string): Promise<Analys
       ? new Date(Math.max(...dates)).toISOString().slice(0, 10)
       : null;
 
+    const nowTrend = (r.recommendationTrend?.trend || []).find(t => t.period === '0m');
+    const currentMonthAnalysts = nowTrend
+      ? nowTrend.strongBuy + nowTrend.buy + nowTrend.hold + nowTrend.sell + nowTrend.strongSell
+      : 0;
+
     return {
       currentPrice: f.currentPrice ?? null,
+      currentMonthAnalysts,
       targetMedian: median,
       dispersionPct,
       lastRatingDate,

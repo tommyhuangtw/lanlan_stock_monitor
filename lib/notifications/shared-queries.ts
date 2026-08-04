@@ -691,7 +691,13 @@ export interface MajorStock {
   tracked: boolean;
 }
 
-/** Consensus targets need more than one analyst behind them to mean anything. */
+/**
+ * Consensus needs this many analysts covering it *this month*. Counting total
+ * coverage would keep quoting a target nobody is maintaining; keying off
+ * upgradeDowngradeHistory instead would discard META (whose feed is stuck in
+ * 2024 despite 62 current analysts) and every TW listing, which has no such
+ * feed at all.
+ */
 const MIN_ANALYSTS = 5;
 
 /**
@@ -725,7 +731,7 @@ function entryScore(
   // one outlier moves the mean a lot (MSFT: high 870 against a 550 median).
   let analystScore = 0;
   let upsidePct: number | null = null;
-  if (price && analyst.targetMedian && analyst.analystCount >= MIN_ANALYSTS) {
+  if (price && analyst.targetMedian && analyst.currentMonthAnalysts >= MIN_ANALYSTS) {
     upsidePct = ((analyst.targetMedian - price) / price) * 100;
     analystScore = Math.max(0, Math.min(40, (upsidePct / 40) * 40));
     // Consensus rating: 1 = strong buy, 5 = strong sell.

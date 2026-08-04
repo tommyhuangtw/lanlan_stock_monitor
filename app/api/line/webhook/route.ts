@@ -862,14 +862,11 @@ async function buildMajorsReply(): Promise<Msg[]> {
     // How much to trust that target: how many analysts, how much they disagree,
     // and how recently any of them actually moved.
     const q: string[] = [];
-    if (s.analyst.analystCount > 0) q.push(`${s.analyst.analystCount} 位`);
+    if (s.analyst.currentMonthAnalysts > 0) q.push(`本月 ${s.analyst.currentMonthAnalysts} 位分析師`);
+    else if (s.analyst.analystCount > 0) q.push(`${s.analyst.analystCount} 位（本月無更新）`);
     if (s.analyst.dispersionPct !== null) {
       const d = s.analyst.dispersionPct;
       q.push(`分歧 ${d.toFixed(0)}%${d > 80 ? '（大）' : d < 40 ? '（小）' : ''}`);
-    }
-    if (s.analyst.lastRatingDate) {
-      const days = Math.round((Date.now() - new Date(s.analyst.lastRatingDate).getTime()) / 86400000);
-      q.push(`最新評等 ${s.analyst.lastRatingDate}${days > 180 ? ' ⚠️過舊' : ''}`);
     }
     if (q.length > 0) {
       body.push({ type: 'text', text: `   ${q.join('  ｜  ')}`, size: 'xxs', color: '#AAAAAA', wrap: true });

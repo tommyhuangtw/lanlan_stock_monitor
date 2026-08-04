@@ -272,6 +272,84 @@ export async function getStoredPrices(
 // Sector classification
 // ============================================================
 
+export interface AnalystView {
+  /** Live price from the same call — the majors card shows untracked stocks
+   *  whose stored price stops updating (TSLA sat 2 months stale at $435 vs $322). */
+  currentPrice: number | null;
+  targetMedian: number | null;
+  targetMean: number | null;
+  targetLow: number | null;
+  targetHigh: number | null;
+  /** 1 = strong buy … 5 = strong sell */
+  recommendationMean: number | null;
+  analystCount: number;
+  forwardPE: number | null;
+  pegRatio: number | null;
+  /** (high − low) / median. Wide means the analysts disagree, so the target means less. */
+  dispersionPct: number | null;
+  /** Most recent dated analyst action. Null for TW listings — Yahoo has none. */
+  lastRatingDate: string | null;
+}
+
+/**
+ * Analyst consensus from Yahoo.
+ *
+ * analystCount matters: 亞翔 (6139) carries a single analyst with a target 91%
+ * above spot, which is noise rather than consensus. Callers should require a
+ * handful before trusting targetMean.
+ */
+export async function fetchAnalystView(tickerNormalized: string): Promise<AnalystView> {
+  const empty: AnalystView = {
+    currentPrice: null, targetMedian: null, targetMean: null, targetLow: null, targetHigh: null,
+    recommendationMean: null, analystCount: 0, forwardPE: null, pegRatio: null,
+    dispersionPct: null, lastRatingDate: null,
+  };
+  try {
+    const r = await yahooFinance.quoteSummary(tickerNormalized, {
+      modules: ['financialData', 'defaultKeyStatistics', 'upgradeDowngradeHistory'],
+    }) as {
+      financialData?: {
+        currentPrice?: number;
+        targetMedianPrice?: number; targetMeanPrice?: number;
+        targetLowPrice?: number; targetHighPrice?: number;
+        recommendationMean?: number; numberOfAnalystOpinions?: number;
+      };
+      defaultKeyStatistics?: { forwardPE?: number; pegRatio?: number };
+      upgradeDowngradeHistory?: { history?: Array<{ epochGradeDate?: Date | number }> };
+    };
+    const f = r.financialData || {};
+    const k = r.defaultKeyStatistics || {};
+
+    const median = f.targetMedianPrice ?? null;
+    const dispersionPct = median && f.targetHighPrice && f.targetLowPrice
+      ? ((f.targetHighPrice - f.targetLowPrice) / median) * 100
+      : null;
+
+    const dates = (r.upgradeDowngradeHistory?.history || [])
+      .map(h => (h.epochGradeDate ? new Date(h.epochGradeDate).getTime() : 0))
+      .filter(Boolean);
+    const lastRatingDate = dates.length
+      ? new Date(Math.max(...dates)).toISOString().slice(0, 10)
+      : null;
+
+    return {
+      currentPrice: f.currentPrice ?? null,
+      targetMedian: median,
+      dispersionPct,
+      lastRatingDate,
+      targetMean: f.targetMeanPrice ?? null,
+      targetLow: f.targetLowPrice ?? null,
+      targetHigh: f.targetHighPrice ?? null,
+      recommendationMean: f.recommendationMean ?? null,
+      analystCount: f.numberOfAnalystOpinions ?? 0,
+      forwardPE: k.forwardPE ?? null,
+      pegRatio: k.pegRatio ?? null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export interface SectorProfile {
   sector: string | null;
   industry: string | null;

@@ -825,10 +825,9 @@ async function buildMajorsReply(): Promise<Msg[]> {
     const currency = s.market === 'TW' ? 'NT$' : '$';
     // Score bands, not a pass/fail: the number is a decayed sum of signals, so
     // treat it as "how much has fired lately", not a recommendation.
-    const band = s.score >= 80 ? { text: '訊號強', color: '#1B5E20' }
-      : s.score >= 40 ? { text: '有訊號', color: '#F57F17' }
-      : s.score > 0 ? { text: '訊號弱', color: '#9E9E9E' }
-      : { text: '無訊號', color: '#BDBDBD' };
+    const band = s.score >= 60 ? { text: '偏吸引', color: '#1B5E20' }
+      : s.score >= 35 ? { text: '中性', color: '#F57F17' }
+      : { text: '偏貴', color: '#9E9E9E' };
 
     body.push({
       type: 'box', layout: 'horizontal', margin: body.length > 0 ? 'lg' : 'none',
@@ -850,6 +849,31 @@ async function buildMajorsReply(): Promise<Msg[]> {
       bits.push(`50日均 ${d >= 0 ? '+' : ''}${d.toFixed(1)}%`);
     }
     body.push({ type: 'text', text: bits.join('  ｜  '), size: 'xxs', color: '#888888', margin: 'xs' });
+
+    // Analyst consensus — the valuation half of the score
+    const val: string[] = [];
+    if (s.upsidePct !== null) val.push(`目標價中位數 ${s.upsidePct >= 0 ? '+' : ''}${s.upsidePct.toFixed(0)}%`);
+    if (s.analyst.forwardPE) val.push(`預估PE ${s.analyst.forwardPE.toFixed(1)}`);
+    if (val.length > 0) {
+      const up = (s.upsidePct ?? 0) >= 20 ? '#1B5E20' : (s.upsidePct ?? 0) >= 0 ? '#666666' : '#B71C1C';
+      body.push({ type: 'text', text: `🎯 ${val.join('  ｜  ')}`, size: 'xxs', color: up, wrap: true, margin: 'xs' });
+    }
+
+    // How much to trust that target: how many analysts, how much they disagree,
+    // and how recently any of them actually moved.
+    const q: string[] = [];
+    if (s.analyst.analystCount > 0) q.push(`${s.analyst.analystCount} 位`);
+    if (s.analyst.dispersionPct !== null) {
+      const d = s.analyst.dispersionPct;
+      q.push(`分歧 ${d.toFixed(0)}%${d > 80 ? '（大）' : d < 40 ? '（小）' : ''}`);
+    }
+    if (s.analyst.lastRatingDate) {
+      const days = Math.round((Date.now() - new Date(s.analyst.lastRatingDate).getTime()) / 86400000);
+      q.push(`最新評等 ${s.analyst.lastRatingDate}${days > 180 ? ' ⚠️過舊' : ''}`);
+    }
+    if (q.length > 0) {
+      body.push({ type: 'text', text: `   ${q.join('  ｜  ')}`, size: 'xxs', color: '#AAAAAA', wrap: true });
+    }
 
     if (s.alertLabels.length > 0) {
       body.push({ type: 'text', text: `⚡ ${s.alertLabels.slice(0, 4).join('、')}`, size: 'xxs', color: '#E65100', wrap: true, margin: 'xs' });
@@ -874,7 +898,7 @@ async function buildMajorsReply(): Promise<Msg[]> {
       body: { type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'none', contents: body },
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '10px',
-        contents: [{ type: 'text', text: '分數 = 近 7 日技術訊號強度（越新越重）', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true }],
+        contents: [{ type: 'text', text: '分數 = 技術位置（RSI、均線）+ 分析師目標價與評等', size: 'xxs', color: '#AAAAAA', align: 'center', wrap: true }],
       },
     },
   }];

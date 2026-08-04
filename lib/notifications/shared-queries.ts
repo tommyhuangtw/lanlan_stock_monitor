@@ -7,7 +7,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase';
-import { getStoredPrices } from '@/lib/stock-data';
+import { getStoredPrices, fetchAnalystView, type AnalystView } from '@/lib/stock-data';
 import { computeTechnicalSnapshot, type TechnicalSnapshot } from '@/lib/technical-indicators';
 
 // ============================================================
@@ -683,18 +683,71 @@ export interface MajorStock {
   rsi: number | null;
   sma50: number | null;
   sma200: number | null;
+  /** 0–100. Entry attractiveness, not signal count — see entryScore(). */
   score: number;
+  upsidePct: number | null;
+  analyst: AnalystView;
   alertLabels: string[];
   tracked: boolean;
+}
+
+/** Consensus targets need more than one analyst behind them to mean anything. */
+const MIN_ANALYSTS = 5;
+
+/**
+ * Entry attractiveness, 0–100. Deliberately not the sum of recent alerts:
+ * that measures how much has fired, which rises when a stock runs up. MSFT
+ * scored 71 at RSI 77 and +21.5% over its 50-day — the worst moment to buy.
+ *
+ * Two halves, each 0–50:
+ *   technical — cheaper relative to its own recent range scores higher
+ *   analyst   — consensus upside, ignored below MIN_ANALYSTS
+ *
+ * A gauge for ranking a fixed list, not a recommendation.
+ */
+function entryScore(
+  price: number | null,
+  rsi: number | null,
+  sma50: number | null,
+  analyst: AnalystView,
+): { score: number; upsidePct: number | null } {
+  // Technical: RSI 30 → full marks, RSI 70+ → nothing. Trading below the
+  // 50-day adds, above it subtracts.
+  let technical = 25;
+  if (rsi !== null) technical = Math.max(0, Math.min(40, ((70 - rsi) / 40) * 40));
+  if (price && sma50) {
+    const gap = ((price - sma50) / sma50) * 100;
+    technical += Math.max(-10, Math.min(10, -gap / 2));
+  }
+  technical = Math.max(0, Math.min(50, technical));
+
+  // Analyst: 0% upside → 0, 40%+ → full marks. Median rather than mean, since
+  // one outlier moves the mean a lot (MSFT: high 870 against a 550 median).
+  let analystScore = 0;
+  let upsidePct: number | null = null;
+  if (price && analyst.targetMedian && analyst.analystCount >= MIN_ANALYSTS) {
+    upsidePct = ((analyst.targetMedian - price) / price) * 100;
+    analystScore = Math.max(0, Math.min(40, (upsidePct / 40) * 40));
+    // Consensus rating: 1 = strong buy, 5 = strong sell.
+    if (analyst.recommendationMean !== null) {
+      analystScore += Math.max(0, Math.min(10, ((3 - analyst.recommendationMean) / 2) * 10));
+    }
+    // Discount when they disagree. NVDA's targets span 180–500 (107% of the
+    // median), which is not a consensus worth ranking on; META's span 54%.
+    if (analyst.dispersionPct !== null && analyst.dispersionPct > 60) {
+      analystScore *= Math.max(0.4, 1 - (analyst.dispersionPct - 60) / 100);
+    }
+  }
+
+  return { score: Math.round(technical + Math.max(0, Math.min(50, analystScore))), upsidePct };
 }
 
 /**
  * Entry read on the majors, in MAJOR_TICKERS order.
  *
- * Scored the same way the watchlist is — decayed alert scores — so the numbers
- * mean the same thing everywhere. A stock with no recent signal still appears,
- * with a score of 0 and its current technicals, because "nothing to do here" is
- * the answer being asked for.
+ * Ranked by entry attractiveness (see entryScore) rather than by how many
+ * alerts fired, so a stock that has already run up doesn't rank highest.
+ * Recent signals are still shown as context.
  */
 export async function fetchMajorStocks(): Promise<MajorStock[]> {
   const sevenDaysAgo = new Date();
@@ -715,38 +768,40 @@ export async function fetchMajorStocks(): Promise<MajorStock[]> {
     alertsByTicker.set(a.ticker, [...(alertsByTicker.get(a.ticker) || []), a]);
   }
 
-  const out: MajorStock[] = [];
-  for (const normalized of MAJOR_TICKERS) {
+  const out = (await Promise.all(MAJOR_TICKERS.map(async normalized => {
     const stock = (stocks || []).find(s => s.ticker_normalized === normalized);
-    if (!stock) continue;
+    if (!stock) return null;
 
     const prices = await getStoredPrices(normalized, 250);
     const snapshot = prices.length >= 14 ? computeTechnicalSnapshot(prices) : null;
 
     const mine = alertsByTicker.get(stock.ticker) || alertsByTicker.get(normalized) || [];
-    let score = 0;
     const labels = new Set<string>();
     for (const a of mine) {
       const cfg = ALERT_TYPE_CONFIG[a.alert_type];
-      if (!cfg) continue;
-      const age = (Date.now() - new Date(a.created_at).getTime()) / 86400000;
-      score += cfg.score * (0.5 + 0.5 * Math.max(0, 1 - age / 7));
-      labels.add(cfg.label);
+      if (cfg) labels.add(cfg.label);
     }
 
-    out.push({
+    const analyst = await fetchAnalystView(normalized);
+    // Live price first: stored prices only refresh for tracked stocks.
+    const price = analyst.currentPrice ?? stock.current_price ?? snapshot?.currentPrice ?? null;
+    const { score, upsidePct } = entryScore(price, snapshot?.rsi14 ?? null, snapshot?.sma50 ?? null, analyst);
+
+    return {
       ticker: stock.ticker,
       displayName: stock.name ? `${stock.name} (${stock.ticker})` : stock.ticker,
       market: stock.market,
-      price: stock.current_price ?? snapshot?.currentPrice ?? null,
+      price,
       rsi: snapshot?.rsi14 ?? null,
       sma50: snapshot?.sma50 ?? null,
       sma200: snapshot?.sma200 ?? null,
       score,
+      upsidePct,
+      analyst,
       alertLabels: [...labels],
       tracked: stock.status === 'active',
-    });
-  }
+    };
+  }))).filter((s): s is MajorStock => s !== null);
 
   return out.sort((a, b) => b.score - a.score);
 }

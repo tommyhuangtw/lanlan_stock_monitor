@@ -10,6 +10,7 @@
     "pipeline": "tsx scripts/daily-pipeline.ts",
     "pipeline:test": "tsx scripts/test-pipeline.ts",
     "pipeline:test-full": "tsx scripts/test-full-flow.ts",
+    "gooaye": "tsx scripts/gooaye-watch.ts",
     "stock-monitor": "tsx scripts/stock-monitor.ts",
     "stock-monitor:backfill": "tsx scripts/stock-monitor.ts --backfill",
     "stock-monitor:us": "tsx scripts/stock-monitor.ts --market US",

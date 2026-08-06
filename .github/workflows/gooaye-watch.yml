@@ -1,0 +1,41 @@
+name: Gooaye Watch
+
+# 股癌 usually drops Sunday and Wednesday evening Taiwan time. Poll hourly
+# across that window, plus one daily catch-all after the daily pipeline in
+# case a release slips to another day.
+on:
+  schedule:
+    - cron: '0 12-23 * * 0,3'  # 20:00–07:00 Taiwan, Sun & Wed
+    - cron: '0 2 * * *'        # 10:00 Taiwan, catch-all
+  workflow_dispatch:
+
+# Shared with daily-pipeline.yml: transcription and analysis are idempotent but
+# not concurrency-safe, so the two workflows must never run at the same time.
+concurrency:
+  group: lanlan-pipeline
+  cancel-in-progress: false
+
+jobs:
+  gooaye-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Check for a new 股癌 episode and push to LINE
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ASSEMBLYAI_API_KEY: ${{ secrets.ASSEMBLYAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        run: npm run gooaye

@@ -10,7 +10,11 @@ export interface FetchFeedsResult {
   errors: string[];
 }
 
-export async function fetchFeeds(): Promise<FetchFeedsResult> {
+/**
+ * @param sourceIds - when given, only these podcast sources are polled.
+ *   Used by the Gooaye watcher so an off-schedule run doesn't pull every feed.
+ */
+export async function fetchFeeds(sourceIds?: string[]): Promise<FetchFeedsResult> {
   const results: FetchFeedsResult = {
     processed: 0,
     newEpisodes: 0,
@@ -19,11 +23,13 @@ export async function fetchFeeds(): Promise<FetchFeedsResult> {
   };
 
   // 1. Get all active podcast sources
-  const { data: sources, error: sourcesError } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('sources')
     .select('*')
     .eq('is_active', true)
     .eq('type', 'podcast');
+  if (sourceIds?.length) query = query.in('id', sourceIds);
+  const { data: sources, error: sourcesError } = await query;
 
   if (sourcesError) {
     throw new Error(`Failed to fetch sources: ${sourcesError.message}`);

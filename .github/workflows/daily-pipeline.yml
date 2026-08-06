@@ -6,6 +6,11 @@ on:
     - cron: '30 1 * * *'
   workflow_dispatch: # Allow manual triggers from GitHub UI
 
+# Shared with gooaye-watch.yml so the two never transcribe/analyse at once.
+concurrency:
+  group: lanlan-pipeline
+  cancel-in-progress: false
+
 jobs:
   daily-pipeline:
     runs-on: ubuntu-latest

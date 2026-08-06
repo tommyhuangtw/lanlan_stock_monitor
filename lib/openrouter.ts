@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions';
 
 /**
  * Attempt to repair common JSON syntax errors from AI responses
@@ -78,7 +79,7 @@ function repairJson(jsonStr: string): string {
 /**
  * Parse JSON with repair attempt on failure
  */
-function parseJsonSafe(content: string): unknown {
+export function parseJsonSafe(content: string): unknown {
   // Strip markdown code fences (```json ... ```)
   const cleaned = content.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
 
@@ -123,6 +124,37 @@ export const openrouter = new OpenAI({
     'X-Title': 'Investment Signal Monitor',
   },
 });
+
+/**
+ * Run a JSON completion and refuse to return a truncated one.
+ *
+ * Gemini 3.x is a thinking model and its reasoning tokens count against
+ * max_tokens — a 1500-token cap was spending 1263 on reasoning and getting cut
+ * mid-JSON. repairJson then "fixed" the fragment into a valid but incomplete
+ * object, so the loss was silent (months of digests shipped without marketMood).
+ * finish_reason is the only reliable signal, so check it: retry once at double
+ * the cap, then throw so the caller's retry/fallback path actually fires.
+ *
+ * Raising a cap costs nothing on its own — output tokens are billed as used.
+ */
+export async function completeJson(
+  params: ChatCompletionCreateParamsNonStreaming,
+  label: string,
+): Promise<string> {
+  const first = await openrouter.chat.completions.create(params);
+  if (first.choices[0]?.finish_reason !== 'length') {
+    return first.choices[0]?.message?.content || '{}';
+  }
+
+  const doubled = (params.max_tokens || 4000) * 2;
+  console.warn(`[${label}] response truncated at max_tokens=${params.max_tokens}, retrying at ${doubled}`);
+
+  const second = await openrouter.chat.completions.create({ ...params, max_tokens: doubled });
+  if (second.choices[0]?.finish_reason === 'length') {
+    throw new Error(`[${label}] response still truncated at max_tokens=${doubled}`);
+  }
+  return second.choices[0]?.message?.content || '{}';
+}
 
 // Model configuration - matching n8n workflow
 // Pro model for heavy analysis/consolidation tasks
@@ -331,9 +363,11 @@ export function isEmptyAnalysis(a: Partial<AnalysisResult> | null | undefined): 
 export async function analyzeTranscript(transcript: string, episodeTitle: string, podcastName?: string): Promise<AnalysisResult> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await openrouter.chat.completions.create({
+      const content = await completeJson({
         model: PRO_MODEL,
-        max_tokens: 7000,
+        // Measured on a 19k-char transcript: 2017 reasoning + 3455 output.
+        // Longer episodes with more signals need the headroom.
+        max_tokens: 12000,
         temperature: 0.3,
         response_format: { type: 'json_object' },
         messages: [
@@ -350,9 +384,7 @@ Episode: ${episodeTitle}
 ${transcript.slice(0, 40000)}`
           }
         ],
-      });
-
-      const content = response.choices[0]?.message?.content || '{}';
+      }, 'analyzeTranscript');
 
       const result = parseJsonSafe(content) as AnalysisResult;
       result.podcastName = podcastName || 'Unknown';
@@ -569,9 +601,10 @@ export async function consolidateReports(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await openrouter.chat.completions.create({
+      const content = await completeJson({
         model: PRO_MODEL,
-        max_tokens: 16000,
+        // Scales with episode count — every episode adds a detailedSummary.
+        max_tokens: 24000,
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
@@ -588,19 +621,21 @@ export async function consolidateReports(
 ${JSON.stringify(inputData, null, 2)}`
           }
         ],
-      });
-
-      const content = response.choices[0]?.message?.content || '{}';
+      }, 'consolidateReports');
 
       const rawReport = parseJsonSafe(content) as Record<string, unknown>;
       const report = normalizeConsolidatedReport(rawReport, analyses.length);
 
       console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
 
-      // Fallback: build episodeSummaries from input analyses if AI omitted them
-      if (report.episodeSummaries.length === 0 && analyses.length > 0) {
-        console.warn('[consolidateReports] ⚠️ episodeSummaries is empty, building from input analyses');
-        for (const a of analyses) {
+      // Fallback: build episodeSummaries from input analyses if AI omitted them.
+      // Per-episode, not all-or-nothing: a partially truncated response used to
+      // slip through this check and quietly drop episodes from the email.
+      const summarised = new Set(report.episodeSummaries.map(s => s.episode));
+      const missing = analyses.filter(a => !summarised.has(a.episodeTitle));
+      if (missing.length > 0) {
+        console.warn(`[consolidateReports] ⚠️ ${missing.length}/${analyses.length} episodes missing a summary, building from input analyses`);
+        for (const a of missing) {
           report.episodeSummaries.push({
             podcast: a.podcastName,
             episode: a.episodeTitle,
@@ -764,9 +799,11 @@ function normalizeConsolidatedReport(raw: Record<string, unknown>, totalEpisodes
 export async function generateQuickDigest(report: ConsolidatedReport): Promise<{ quickDigest: string[]; marketMood: string }> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await openrouter.chat.completions.create({
+      const content = await completeJson({
         model: PRO_MODEL,
-        max_tokens: 1500,
+        // Output is tiny (~250 tokens) but reasoning alone measured 1263, so the
+        // old 1500 cap cut the JSON before marketMood — the last field — landed.
+        max_tokens: 6000,
         temperature: 0.3,
         response_format: { type: 'json_object' },
         messages: [
@@ -807,9 +844,8 @@ export async function generateQuickDigest(report: ConsolidatedReport): Promise<{
 ${JSON.stringify(report, null, 2)}`
           }
         ],
-      });
+      }, 'generateQuickDigest');
 
-      const content = response.choices[0]?.message?.content || '{}';
       console.log('[generateQuickDigest] Raw AI response:', content);
 
       const parsed = parseJsonSafe(content) as Record<string, unknown>;
@@ -932,9 +968,10 @@ export async function classifyEpisodeRelevance(
     episodes.map(e => ({ episodeId: e.episodeId, keep: true, category: 'market' as const, reason }));
 
   try {
-    const response = await openrouter.chat.completions.create({
+    const content = await completeJson({
       model: FLASH_MODEL,
-      max_tokens: 2000,
+      // One verdict per episode; the cap has to cover reasoning too.
+      max_tokens: 4000,
       temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [
@@ -951,9 +988,9 @@ export async function classifyEpisodeRelevance(
           ].filter(Boolean).join('\n')).join('\n\n---\n\n'),
         },
       ],
-    });
+    }, 'classifyEpisodeRelevance');
 
-    const parsed = parseJsonSafe(response.choices[0]?.message?.content || '{}') as {
+    const parsed = parseJsonSafe(content) as {
       verdicts?: RelevanceVerdict[];
     };
     if (!Array.isArray(parsed.verdicts) || parsed.verdicts.length === 0) {
@@ -1038,7 +1075,7 @@ export async function classifyTechStocks(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
   try {
-    const response = await openrouter.chat.completions.create({
+    const content = await completeJson({
       model: LITE_MODEL,
       max_tokens: 4000,
       temperature: 0,
@@ -1055,9 +1092,9 @@ export async function classifyTechStocks(
           ).join('\n\n'),
         },
       ],
-    });
+    }, 'classifyTechStocks');
 
-    const parsed = parseJsonSafe(response.choices[0]?.message?.content || '{}') as {
+    const parsed = parseJsonSafe(content) as {
       results?: Array<{ id: number; tech: boolean; reason: string }>;
     };
     if (!Array.isArray(parsed.results) || parsed.results.length === 0) {

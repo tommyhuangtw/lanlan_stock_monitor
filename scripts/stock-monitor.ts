@@ -12,7 +12,7 @@ import { classifyTechStocks } from '../lib/openrouter';
 import { detectEntryPoints, saveAlerts } from '../lib/entry-point-detector';
 import { sendLineAlerts } from '../lib/notifications/line';
 import type { CleanupEntry } from '../lib/notifications/line';
-import { sendEmailAlert, sendPipelineAlert } from '../lib/notifications/email-alert';
+import { sendPipelineAlert } from '../lib/notifications/email-alert';
 import { generateAndSaveAliases } from '../lib/generate-aliases';
 import { supabaseAdmin } from '../lib/supabase';
 import { log } from '../lib/logger';
@@ -297,21 +297,13 @@ async function main() {
     }
   }
 
-  // Email notification (one consolidated email)
-  const emailSent = await sendEmailAlert(detectionResults);
-  console.log(`Email: ${emailSent ? 'sent' : 'skipped'}`);
-
   // Update sent status
   if (alertIds.length > 0) {
-    const sentVia = [];
-    if (lineSent > 0) sentVia.push('line');
-    if (emailSent) sentVia.push('email');
-
     await supabaseAdmin
       .from('stock_alerts')
       .update({
         status: 'sent',
-        sent_via: sentVia,
+        sent_via: ['line'],
         sent_at: new Date().toISOString(),
       })
       .in('id', alertIds);

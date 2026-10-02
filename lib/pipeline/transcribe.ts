@@ -11,6 +11,34 @@ export interface TranscribeResult {
   errors: string[];
 }
 
+async function startApifyRun(videoUrl: string, apifyToken: string): Promise<string> {
+  const response = await fetch(
+    `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/runs?token=${apifyToken}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoUrl }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Apify API error: ${errorText}`);
+  }
+
+  const result = await response.json();
+  const runId = result.data?.id;
+  if (!runId) {
+    throw new Error('No run ID returned from Apify');
+  }
+  return runId;
+}
+
+// The caption actor fails intermittently ("responseMessage is not defined")
+// and a rerun of the same video usually succeeds, so retry before giving up.
+const APIFY_MAX_RETRIES = 2;
+const apifyRetries = new Map<number, number>();
+
 async function markJobFailed(jobId: number, errorMessage: string) {
   await supabaseAdmin
     .from('transcription_jobs')
@@ -109,26 +137,7 @@ export async function transcribeAll(): Promise<TranscribeResult> {
       }
 
       try {
-        const response = await fetch(
-          `https://api.apify.com/v2/acts/pintostudio~youtube-transcript-scraper/runs?token=${apifyToken}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoUrl: episode.audio_url }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Apify API error: ${errorText}`);
-        }
-
-        const result = await response.json();
-        const runId = result.data?.id;
-
-        if (!runId) {
-          throw new Error('No run ID returned from Apify');
-        }
+        const runId = await startApifyRun(episode.audio_url, apifyToken);
 
         await supabaseAdmin
           .from('transcription_jobs')
@@ -164,7 +173,7 @@ export async function transcribeAll(): Promise<TranscribeResult> {
     // Check all processing jobs
     const { data: processingJobs } = await supabaseAdmin
       .from('transcription_jobs')
-      .select('*')
+      .select('*, episodes ( audio_url )')
       .eq('status', 'processing');
 
     if (!processingJobs || processingJobs.length === 0) {
@@ -248,7 +257,7 @@ async function checkAssemblyAIJob(
 }
 
 async function checkApifyJob(
-  job: { id: number; apify_run_id: string },
+  job: { id: number; apify_run_id: string; episodes: { audio_url: string } | null },
   apifyToken: string,
   results: TranscribeResult
 ) {
@@ -319,6 +328,15 @@ async function checkApifyJob(
         results.apify.completed++;
       }
     } else if (runStatus === 'FAILED' || runStatus === 'ABORTED' || runStatus === 'TIMED-OUT') {
+      const retries = apifyRetries.get(job.id) || 0;
+      const videoUrl = job.episodes?.audio_url;
+      if (videoUrl && retries < APIFY_MAX_RETRIES) {
+        apifyRetries.set(job.id, retries + 1);
+        const runId = await startApifyRun(videoUrl, apifyToken);
+        console.log(`  Apify run ${runStatus} for job ${job.id}, retry ${retries + 1}/${APIFY_MAX_RETRIES}`);
+        await supabaseAdmin.from('transcription_jobs').update({ apify_run_id: runId }).eq('id', job.id);
+        return;
+      }
       await markJobFailed(job.id, `Apify run ${runStatus}`);
       results.apify.failed++;
     }

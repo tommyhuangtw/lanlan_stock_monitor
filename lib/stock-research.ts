@@ -1,12 +1,12 @@
 /**
  * Market Brief Module
- * Uses Perplexity (via OpenRouter) for search, Gemini for filtering/selection.
+ * Uses Perplexity (via OpenRouter) for search, FLASH_MODEL for filtering/selection.
  */
 
-import { openrouter } from './openrouter';
+import { openrouter, FLASH_MODEL } from './openrouter';
 
-const PERPLEXITY_MODEL = 'perplexity/sonar-pro-search';
-const SELECT_MODEL = 'google/gemini-3.1-pro-preview';
+// sonar-pro: same news specificity as sonar-pro-search in an Oct 2026 A/B, ~30% cheaper.
+const PERPLEXITY_MODEL = 'perplexity/sonar-pro';
 const MAX_RETRIES = 2;
 const MIN_BULLETS = 4;
 const MAX_BULLETS = 5;
@@ -154,7 +154,7 @@ async function selectTopBullets(bulletLines: string[]): Promise<string[]> {
   if (bulletLines.length <= MIN_BULLETS) return bulletLines.map(stripDateFromTitle);
   try {
     const response = await openrouter.chat.completions.create({
-      model: SELECT_MODEL,
+      model: FLASH_MODEL,
       messages: [
         {
           role: 'system',

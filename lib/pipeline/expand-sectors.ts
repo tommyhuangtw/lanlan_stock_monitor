@@ -9,13 +9,14 @@
  */
 
 import { supabaseAdmin } from '../supabase';
-import { openrouter, PRO_MODEL, SectorTheme } from '../openrouter';
+import { openrouter, FLASH_MODEL, SectorTheme } from '../openrouter';
 import { normalizeTicker, isAllowedTicker, resolveYahooTicker } from '../ticker-utils';
 import { log } from '../logger';
 import { checkTechStock, techColumns } from '../tech-filter';
 import type { NewWatchlistStock } from '../notifications/line';
 
-const PERPLEXITY_MODEL = 'perplexity/sonar-pro-search';
+// Plain sonar: finds 7-10 valid tickers per theme and the select step keeps <=8 anyway; 1/5 the cost of pro-search.
+const PERPLEXITY_MODEL = 'perplexity/sonar';
 const EXPANSION_COOLDOWN_DAYS = 7;
 
 /**
@@ -340,7 +341,7 @@ async function searchSectorStocks(theme: string, context: string): Promise<Secto
   // Step 2: Use Gemini to extract and filter structured data
   try {
     const response = await openrouter.chat.completions.create({
-      model: PRO_MODEL,
+      model: FLASH_MODEL,
       response_format: { type: 'json_object' },
       messages: [
         {

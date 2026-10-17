@@ -156,14 +156,13 @@ export async function completeJson(
   return second.choices[0]?.message?.content || '{}';
 }
 
-// Model configuration - matching n8n workflow
-// Pro model for heavy analysis/consolidation tasks
-export const PRO_MODEL = 'google/gemini-3.1-pro-preview';
-// Flash model for lighter tasks (quick digest, simple processing)
-export const FLASH_MODEL = 'google/gemini-3-flash-preview';
-// Cheapest tier — used for one-shot classification where the input is already
-// factual (ticker + Yahoo sector) and the output is a boolean plus a label.
-export const LITE_MODEL = 'google/gemini-3.5-flash-lite';
+// Model tiers, picked from a 10-episode A/B against gemini-3.1-pro (Oct 2026).
+// Pro: per-episode transcript extraction only — the one step where the cheap
+// tier measurably missed/misread tickers (81% overlap, TW small caps worst).
+export const PRO_MODEL = 'google/gemini-4-argon';
+// Everything else: consolidation, digest, briefs, classification. Matched Pro
+// quality in the A/B at ~1/20 the cost.
+export const FLASH_MODEL = 'openai/gpt-6-luna';
 
 // Types matching n8n workflow output structure
 export interface Signal {
@@ -452,6 +451,7 @@ export function toLegacyFormat(analysis: AnalysisResult): LegacyAnalysisResult {
 const CONSOLIDATION_SYSTEM_PROMPT = `⚠️⚠️ 語言規則（最高優先）：
 - 所有文字內容必須使用繁體中文，包括 episodeSummaries 的 highlights、detailedSummary、oneLiner
 - 即使原始輸入中有英文內容，也必須翻譯成繁體中文
+- 例外：episodeSummaries 的 podcast 與 episode 欄位必須原樣複製輸入的 podcastName 與 episodeTitle，不可翻譯或改寫
 - 唯一允許英文的場合：股票代號（AAPL）、公司名稱（Apple）、專有名詞（AI、ETF、Fed）
 
 你是一位專業的投資報告整合師。你的任務是將多集節目的分析結果整合為一份完整、豐富且有價值的投資日報。
@@ -602,7 +602,7 @@ export async function consolidateReports(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const content = await completeJson({
-        model: PRO_MODEL,
+        model: FLASH_MODEL,
         // Scales with episode count — every episode adds a detailedSummary.
         max_tokens: 24000,
         temperature: 0.2,
@@ -625,6 +625,16 @@ ${JSON.stringify(inputData, null, 2)}`
 
       const rawReport = parseJsonSafe(content) as Record<string, unknown>;
       const report = normalizeConsolidatedReport(rawReport, analyses.length);
+
+      // Summaries are matched back to episodes by exact title, and models like
+      // to translate titles ("EP705 | 🎀" -> "第705集｜緞帶") despite the prompt.
+      // When there's one summary per episode, they come back in input order.
+      if (report.episodeSummaries.length === analyses.length) {
+        report.episodeSummaries.forEach((s, i) => {
+          s.episode = analyses[i].episodeTitle;
+          s.podcast = analyses[i].podcastName;
+        });
+      }
 
       console.log(`[consolidateReports] Result: ${report.bullishSignals.length} bullish, ${report.bearishSignals.length} bearish, ${report.monitorSignals.length} monitor, ${report.episodeSummaries.length} episodeSummaries`);
 
@@ -800,7 +810,7 @@ export async function generateQuickDigest(report: ConsolidatedReport): Promise<{
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const content = await completeJson({
-        model: PRO_MODEL,
+        model: FLASH_MODEL,
         // Output is tiny (~250 tokens) but reasoning alone measured 1263, so the
         // old 1500 cap cut the JSON before marketMood — the last field — landed.
         max_tokens: 6000,
@@ -1076,7 +1086,7 @@ export async function classifyTechStocks(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
   try {
     const content = await completeJson({
-      model: LITE_MODEL,
+      model: FLASH_MODEL,
       max_tokens: 4000,
       temperature: 0,
       response_format: { type: 'json_object' },

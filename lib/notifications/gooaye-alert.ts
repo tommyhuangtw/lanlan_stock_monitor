@@ -7,7 +7,7 @@
  */
 
 import { supabaseAdmin } from '../supabase';
-import { completeJson, PRO_MODEL, parseJsonSafe } from '../openrouter';
+import { completeJson, FLASH_MODEL, parseJsonSafe } from '../openrouter';
 import { sendLineText } from './line';
 import { log } from '../logger';
 
@@ -58,7 +58,7 @@ const BRIEF_PROMPT = `⚠️ 所有輸出必須 100% 使用繁體中文（股票
 /** Ask the model for the operations / trend / playbook breakdown of one episode. */
 async function extractBrief(transcript: string, episodeTitle: string): Promise<GooayeBrief> {
   const content = await completeJson({
-    model: PRO_MODEL,
+    model: FLASH_MODEL,
     max_tokens: 8000,
     temperature: 0.3,
     response_format: { type: 'json_object' },

@@ -32,7 +32,11 @@ export async function analyzeAll(): Promise<AnalyzeResult> {
       )
     `)
     .eq('status', 'completed')
-    .not('transcript', 'is', null);
+    .not('transcript', 'is', null)
+    // Newest first: PostgREST caps unordered results at 1000 rows, which are all old, already-analyzed jobs.
+    // ponytail: 200 covers any realistic backlog, raise if a long outage ever leaves more unanalyzed.
+    .order('id', { ascending: false })
+    .limit(200);
 
   if (jobsError) {
     throw new Error(`Failed to fetch jobs: ${jobsError.message}`);

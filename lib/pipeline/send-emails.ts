@@ -279,6 +279,11 @@ export async function sendEmails(): Promise<SendEmailsResult> {
       // Inject URLs into cached HTML
       let emailHtml = injectMagicLinkToHtml(digest.html_template, baseUrl, unsubscribeUrl);
 
+      // Temporary promo: set PROMO_HTML (Actions variable) to fill the ad slot right after 今日總覽, unset to turn off
+      if (process.env.PROMO_HTML) {
+        emailHtml = emailHtml.replace('<!-- AD_SLOT_TOP -->', () => process.env.PROMO_HTML as string);
+      }
+
       // Show "Buy Me a Coffee" block: only on specific weekdays, for users signed up 7+ days ago
       const createdAt = new Date(user.created_at as string);
       const daysSinceSignup = (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);

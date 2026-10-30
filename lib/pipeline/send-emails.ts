@@ -246,6 +246,12 @@ export async function sendEmails(): Promise<SendEmailsResult> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
+  // Temporary promo: PROMO_HTML (Actions variable) fills the ad slot right after 今日總覽; unset to turn off.
+  // Optional PROMO_VARIANTS="a,b,c" rotates one per day into the {{VARIANT}} placeholder.
+  const promoVariants = (process.env.PROMO_VARIANTS || '').split(',').map(v => v.trim()).filter(Boolean);
+  const promoVariant = promoVariants.length ? promoVariants[Math.floor(today.getTime() / 86400000) % promoVariants.length] : '';
+  const promoHtml = (process.env.PROMO_HTML || '').replaceAll('{{VARIANT}}', promoVariant);
+
   // Phase 1: Prepare all emails (generate per-user HTML)
   const preparedEmails: PreparedEmail[] = [];
 
@@ -279,9 +285,8 @@ export async function sendEmails(): Promise<SendEmailsResult> {
       // Inject URLs into cached HTML
       let emailHtml = injectMagicLinkToHtml(digest.html_template, baseUrl, unsubscribeUrl);
 
-      // Temporary promo: set PROMO_HTML (Actions variable) to fill the ad slot right after 今日總覽, unset to turn off
-      if (process.env.PROMO_HTML) {
-        emailHtml = emailHtml.replace('<!-- AD_SLOT_TOP -->', () => process.env.PROMO_HTML as string);
+      if (promoHtml) {
+        emailHtml = emailHtml.replace('<!-- AD_SLOT_TOP -->', () => promoHtml);
       }
 
       // Show "Buy Me a Coffee" block: only on specific weekdays, for users signed up 7+ days ago

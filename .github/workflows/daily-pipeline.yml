@@ -47,6 +47,7 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
           PROMO_HTML: ${{ vars.PROMO_HTML }}
+          PROMO_VARIANTS: ${{ vars.PROMO_VARIANTS }}
         run: npm run pipeline
 
       - name: Send daily brief to Telegram

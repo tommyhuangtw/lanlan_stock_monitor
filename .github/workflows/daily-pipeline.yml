@@ -52,6 +52,8 @@ jobs:
 
       - name: Send daily brief to Telegram
         if: always()
+        # LINE monthly push quota is exhausted (known); don't fail the whole run for it
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
